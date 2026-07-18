@@ -1,0 +1,62 @@
+# FreeFlow Behavior Parity Matrix
+
+Status: Draft baseline
+Research cutoff: 2026-07-17
+Scope: Windows and macOS desktop behavior only
+
+## Meaning of parity
+
+“Parity” means that a user can complete the same class of task with comparable interaction cost and a documented quality threshold. It does not mean identical source code, model output, pixels, copy, service internals, or proprietary cloud behavior.
+
+Statuses remain `Planned` until a PSPR gate records passing evidence.
+
+| ID | Observable workflow | FreeFlow target | Priority | Status | Public basis |
+|---|---|---|---|---|---|
+| BF-001 | Hold or toggle a global shortcut, speak, release, and insert text at the cursor | Push-to-talk and toggle modes; configurable keyboard/mouse bindings; Escape cancels | P0 | Planned | [Command shortcuts](https://docs.wisprflow.ai/articles/4816967992-how-to-use-command-mode) |
+| BF-002 | Record from a chosen microphone with visible feedback | Device picker, live level/waveform, cancel/stop, actionable mic errors | P0 | Planned | [Desktop navigation](https://docs.wisprflow.ai/articles/5096240724-navigating-the-wispr-flow-app-desktop-ios-and-android) |
+| BF-003 | Transcribe without a network service | All speech recognition runs locally after an explicit model download | P0 | Planned | FreeFlow differentiator; [whisper.cpp](https://github.com/ggml-org/whisper.cpp) |
+| BF-004 | Paste into common desktop applications | Direct insertion where safe; clipboard-preserving paste fallback; manual-copy fallback | P0 | Planned | [Desktop navigation](https://docs.wisprflow.ai/articles/5096240724-navigating-the-wispr-flow-app-desktop-ios-and-android) |
+| BF-005 | Recover the most recent or failed dictation | Durable local audio until success/expiry, retry, copy, and paste-last-transcript shortcut | P0 | Planned | [Retry failed transcriptions](https://docs.wisprflow.ai/articles/2503460374-retry-failed-transcriptions) |
+| BF-006 | Use a floating status control | Original FreeFlow bar with recording/processing/success/error states and persisted bottom/left/right docking | P1 | Planned | [Move and dock the Flow Bar](https://docs.wisprflow.ai/articles/1790396454-move-and-dock-the-flow-bar-on-desktop) |
+| BF-007 | Use tray/menu-bar controls | Open Hub, start/stop, microphone, language, history, paste last, settings, quit | P0 | Planned | [Desktop navigation](https://docs.wisprflow.ai/articles/5096240724-navigating-the-wispr-flow-app-desktop-ios-and-android) |
+| BF-008 | Review dictation history and stats | Searchable local history, raw/final text, app, latency, WPM, retry/copy/delete; local-only aggregates | P1 | Planned | [Desktop navigation](https://docs.wisprflow.ai/articles/5096240724-navigating-the-wispr-flow-app-desktop-ios-and-android) |
+| BF-009 | Teach specialized words and corrections | Local vocabulary boosting when supported plus deterministic replacement rules, starring, CSV import/export | P0 | Planned | [Dictionary](https://docs.wisprflow.ai/articles/4052411709-teach-flow-your-words-with-the-dictionary) |
+| BF-010 | Speak a trigger to insert saved content | Case-insensitive whole-phrase snippets; CRUD; JSON import/export; deterministic precedence | P0 | Planned | [Snippets](https://docs.wisprflow.ai/articles/5784437944-create-and-use-snippets) |
+| BF-011 | Dictate natural punctuation, lists, paragraphs, and corrections | Deterministic spoken punctuation plus local cleanup for lists, capitalization, spacing, fillers, and backtracking | P0 | Planned | [Smart Formatting and Backtrack](https://docs.wisprflow.ai/articles/5373093536-how-do-i-use-smart-formatting-and-backtrack) |
+| BF-012 | End by saying “press enter” | Opt-in end-of-utterance command with first-use confirmation and literal-text escape | P1 | Planned | [Smart Formatting and Backtrack](https://docs.wisprflow.ai/articles/5373093536-how-do-i-use-smart-formatting-and-backtrack) |
+| BF-013 | Select one or more dictation languages | Model-aware language list, explicit selection, per-session detection, locale-specific post-processing | P0 | Planned | [Multiple languages](https://docs.wisprflow.ai/articles/3191899797-use-flow-with-multiple-languages) |
+| BF-014 | Adapt formatting to the active app and nearby text | Local process/app classification; minimum necessary text context; per-app denylist; feature can be disabled | P1 | Planned | [Data controls](https://wisprflow.ai/data-controls) |
+| BF-015 | Choose a writing style and cleanup strength | Local None/Light/Medium/High cleanup; per-category original FreeFlow style profiles | P1 | Planned | [Styles](https://docs.wisprflow.ai/articles/2368263928-how-to-setup-flow-styles), [Auto Cleanup](https://wisprflow.ai/whats-new) |
+| BF-016 | Rewrite selected text from a shortcut | Local transform engine, configurable prompts, selection replacement, timeout fallback, undo and diff | P1 | Planned | [Transforms](https://docs.wisprflow.ai/articles/8068950331-how-to-use-transforms-beta) |
+| BF-017 | Speak an instruction over selected text or at the cursor | Local command mode for rewrite/translate/generate; never changes preferences without confirmation | P2 | Planned | [Command Mode](https://docs.wisprflow.ai/articles/4816967992-how-to-use-command-mode) |
+| BF-018 | Keep a scratchpad for voice notes | Local notes, search, pin, edit, export, delete; no account required | P2 | Planned | [Desktop navigation](https://docs.wisprflow.ai/articles/5096240724-navigating-the-wispr-flow-app-desktop-ios-and-android) |
+| BF-019 | Dictate developer identifiers and filenames | Preserve/code-format common identifiers; optional local workspace filename index with explicit roots | P2 | Planned | [Features](https://wisprflow.ai/features) |
+| BF-020 | Dictate for long sessions | Segmented local capture up to 20 minutes, warning, automatic finalize, and recovery | P2 | Planned | [Longer dictations](https://docs.wisprflow.ai/articles/4841123325-longer-dictation-sessions-now-up-to-20-minutes) |
+| BF-021 | Start at login and manage OS permissions | Original onboarding, model choice, mic/accessibility status, autostart, reset/restart | P0 | Planned | [System requirements](https://docs.wisprflow.ai/articles/1036674442-supported-devices-and-system-requirements) |
+| BF-022 | Operate privately | No account, telemetry off, local database, local inference, auditable outbound-network deny test, clear deletion controls | P0 | Planned | FreeFlow differentiator; [Wispr states its own transcription is cloud-based](https://wisprflow.ai/data-controls) |
+| BF-023 | Deliver text through terminals, remote desktops, and privilege boundaries | Per-target paste strategies, bounded chunking for terminal AI tools, explicit copy/paste-last fallback for WSL/RDP/VDI, and truthful diagnostics for OS security boundaries | P1 | Planned | [Terminal and WSL behavior](https://docs.wisprflow.ai/articles/6478598909-using-flow-with-linux-wsl-and-terminal-applications), [remote desktops](https://docs.wisprflow.ai/articles/7336156466-use-flow-with-remote-desktops-citrix-rdp-vdi) |
+
+## Parked or explicitly non-parity scope
+
+| Area | Disposition | Reason |
+|---|---|---|
+| iOS and Android apps/keyboards | Parked for a future PSPR | Current initiative is Windows and macOS |
+| Wispr accounts, billing, referral, trials, word caps, and upgrade prompts | Excluded | FreeFlow has no account or subscription |
+| Wispr branding, exact UI, sounds, copy, animations, and proprietary model output | Excluded | Independent design and clean-room requirement |
+| Enterprise administration and usage leaderboards | Parked | Not required for a free local single-user release |
+| Proprietary cloud sync | Excluded | Conflicts with local-only default; encrypted self-hosted sync may be proposed later |
+| Meeting recording, system-audio capture, diarization, and calendar integration | Parked behind a separate consent/privacy PSPR | Material platform, consent, and scope expansion |
+| Screen capture and visual question answering | Parked | Not part of core dictation and expands sensitive-data access |
+
+## Release-level quantitative gates
+
+- Offline proof: after model installation, the full P0/P1 dictation workflow passes while outbound networking is blocked; packet capture records no attempted application traffic except OS-level noise outside the process.
+- Core latency: on the declared reference hardware, a 10-second English utterance reaches the target field in p50 at or below 2.5 seconds and p95 at or below 6 seconds after release.
+- Start responsiveness: recording feedback appears within 150 ms p95 after a shortcut event.
+- First-word integrity: after 50 idle/record cycles and after another application releases the microphone, every owned-corpus utterance retains its initial word; a bounded pre-roll buffer is used when the platform requires it.
+- Paste reliability: at least 98% successful insertions across the representative Windows and macOS application matrix, with no lost clipboard contents in the fallback path.
+- Resource budget: with no model loaded, idle process CPU remains below 2% average and resident memory below 250 MB on reference hosts; with a model loaded, non-model application overhead remains below 300 MB and each model manifest reports its measured footprint.
+- Stability: 100 consecutive short dictations and 10 consecutive 20-minute segmented captures without process crash, unrecoverable audio, or stuck shortcut state.
+- Quality: the selected default model meets the roster’s frozen WER and semantic task-success thresholds on public and consented, project-owned corpora; raw and cleaned scores are reported separately.
+- Privacy: deletion, never-store, and retention settings have automated storage tests; no audio or transcript persists beyond the selected policy.
+- Accessibility: all Hub workflows are keyboard reachable and screen-reader labels pass automated checks plus one live pass per platform.
