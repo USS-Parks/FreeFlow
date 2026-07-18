@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
+import { commands } from "@/bindings";
 import { SettingContainer } from "../../ui/SettingContainer";
 import { Button } from "../../ui/Button";
 
@@ -161,7 +162,8 @@ export const LiveLogViewer: React.FC<LiveLogViewerProps> = ({
       .map((l) => `${l.time} ${metaFor(l.level).tag} ${l.message}`)
       .join("\n");
     try {
-      await navigator.clipboard.writeText(text);
+      const result = await commands.copyTextToClipboard(text);
+      if (result.status !== "ok") throw new Error(String(result.error));
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch (error) {

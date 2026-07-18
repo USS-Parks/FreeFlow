@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { commands } from "@/bindings";
 import { SettingContainer } from "./SettingContainer";
 
 interface TextDisplayProps {
@@ -30,7 +31,8 @@ export const TextDisplay: React.FC<TextDisplayProps> = ({
     if (!value || !copyable) return;
 
     try {
-      await navigator.clipboard.writeText(value);
+      const result = await commands.copyTextToClipboard(value);
+      if (result.status !== "ok") throw new Error(String(result.error));
       setShowCopied(true);
       setTimeout(() => setShowCopied(false), 1500);
       if (onCopy) {

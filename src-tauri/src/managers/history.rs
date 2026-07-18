@@ -1,37 +1,22 @@
+use crate::storage::migrations::{MigrationRunner, HISTORY_MIGRATIONS};
+
+fn recording_file_name(file_name: &str) -> Result<&Path> {
+    let candidate = Path::new(file_name);
+    if candidate.file_name().and_then(|name| name.to_str()) != Some(file_name) {
+        return Err(anyhow!("invalid recording file name"));
+    }
+    Ok(candidate)
+}
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Local, Utc};
 use log::{debug, error, info};
 use rusqlite::{params, Connection, OptionalExtension};
-use rusqlite_migration::{Migrations, M};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 use tauri_specta::Event;
-
-/// Database migrations for transcription history.
-/// Each migration is applied in order. The library tracks which migrations
-/// have been applied using SQLite's user_version pragma.
-///
-/// Note: For users upgrading from tauri-plugin-sql, migrate_from_tauri_plugin_sql()
-/// converts the old _sqlx_migrations table tracking to the user_version pragma,
-/// ensuring migrations don't re-run on existing databases.
-static MIGRATIONS: &[M] = &[
-    M::up(
-        "CREATE TABLE IF NOT EXISTS transcription_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            file_name TEXT NOT NULL,
-            timestamp INTEGER NOT NULL,
-            saved BOOLEAN NOT NULL DEFAULT 0,
-            title TEXT NOT NULL,
-            transcription_text TEXT NOT NULL
-        );",
-    ),
-    M::up("ALTER TABLE transcription_history ADD COLUMN post_processed_text TEXT;"),
-    M::up("ALTER TABLE transcription_history ADD COLUMN post_process_prompt TEXT;"),
-    M::up("ALTER TABLE transcription_history ADD COLUMN post_process_requested BOOLEAN NOT NULL DEFAULT 0;"),
-];
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
 pub struct PaginatedHistory {
@@ -101,16 +86,11 @@ impl HistoryManager {
 
         let mut conn = Connection::open(&self.db_path)?;
 
-        // Handle migration from tauri-plugin-sql to rusqlite_migration
-        // tauri-plugin-sql used _sqlx_migrations table, rusqlite_migration uses user_version pragma
+        // Preserve migration state from the legacy SQL plugin before the
+        // reversible FreeFlow runner takes ownership of user_version.
         self.migrate_from_tauri_plugin_sql(&conn)?;
 
-        // Create migrations object and run to latest version
-        let migrations = Migrations::new(MIGRATIONS.to_vec());
-
-        // Validate migrations in debug builds
-        #[cfg(debug_assertions)]
-        migrations.validate().expect("Invalid migrations");
+        let migrations = MigrationRunner::new(HISTORY_MIGRATIONS)?;
 
         // Get current version before migration
         let version_before: i32 =
@@ -118,7 +98,7 @@ impl HistoryManager {
         debug!("Database version before migration: {}", version_before);
 
         // Apply any pending migrations
-        migrations.to_latest(&mut conn)?;
+        migrations.migrate_to_latest(&mut conn)?;
 
         // Get version after migration
         let version_after: i32 = conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
@@ -135,9 +115,9 @@ impl HistoryManager {
         Ok(())
     }
 
-    /// Migrate from tauri-plugin-sql's migration tracking to rusqlite_migration's.
-    /// tauri-plugin-sql used a _sqlx_migrations table, while rusqlite_migration uses
-    /// SQLite's user_version pragma. This function checks if the old system was in use
+    /// Migrate from the legacy SQL plugin's tracking to FreeFlow's runner.
+    /// The old plugin used a _sqlx_migrations table, while FreeFlow uses SQLite's
+    /// user_version pragma. This function checks if the old system was in use
     /// and sets the user_version accordingly so migrations don't re-run.
     fn migrate_from_tauri_plugin_sql(&self, conn: &Connection) -> Result<()> {
         // Check if the old _sqlx_migrations table exists
@@ -158,7 +138,7 @@ impl HistoryManager {
             conn.pragma_query_value(None, "user_version", |row| row.get(0))?;
 
         if current_version > 0 {
-            // Already migrated to rusqlite_migration system
+            // Already migrated to the FreeFlow runner.
             return Ok(());
         }
 
@@ -173,7 +153,7 @@ impl HistoryManager {
 
         if old_version > 0 {
             info!(
-                "Migrating from tauri-plugin-sql (version {}) to rusqlite_migration",
+                "Migrating legacy SQL state (version {}) to the FreeFlow runner",
                 old_version
             );
 
@@ -581,8 +561,8 @@ impl HistoryManager {
         Ok(())
     }
 
-    pub fn get_audio_file_path(&self, file_name: &str) -> PathBuf {
-        self.recordings_dir.join(file_name)
+    pub fn get_audio_file_path(&self, file_name: &str) -> Result<PathBuf> {
+        Ok(self.recordings_dir.join(recording_file_name(file_name)?))
     }
 
     pub async fn get_entry_by_id(&self, id: i64) -> Result<Option<HistoryEntry>> {
@@ -613,7 +593,7 @@ impl HistoryManager {
         // Get the entry to find the file name
         if let Some(entry) = self.get_entry_by_id(id).await? {
             // Delete the audio file first
-            let file_path = self.get_audio_file_path(&entry.file_name);
+            let file_path = self.get_audio_file_path(&entry.file_name)?;
             if file_path.exists() {
                 if let Err(e) = fs::remove_file(&file_path) {
                     error!("Failed to delete audio file {}: {}", entry.file_name, e);
@@ -704,6 +684,18 @@ mod tests {
         let conn = setup_conn();
         let entry = HistoryManager::get_latest_entry_with_conn(&conn).expect("fetch latest entry");
         assert!(entry.is_none());
+    }
+
+    #[test]
+    fn recording_file_name_rejects_path_traversal() {
+        assert!(recording_file_name("../settings_store.json").is_err());
+        assert!(recording_file_name("nested/recording.wav").is_err());
+        assert_eq!(
+            recording_file_name("freeflow-123.wav")
+                .expect("plain recording file name")
+                .to_string_lossy(),
+            "freeflow-123.wav"
+        );
     }
 
     #[test]

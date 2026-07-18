@@ -6,6 +6,7 @@ pub mod transcription;
 use crate::settings::{get_settings, write_settings, AppSettings, LogLevel};
 use crate::utils::cancel_current_operation;
 use tauri::{AppHandle, Manager};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use tauri_plugin_opener::OpenerExt;
 
 #[tauri::command]
@@ -39,6 +40,14 @@ pub fn get_app_settings(app: AppHandle) -> Result<AppSettings, String> {
 #[specta::specta]
 pub fn get_default_settings() -> Result<AppSettings, String> {
     Ok(crate::settings::get_default_settings())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn copy_text_to_clipboard(app: AppHandle, text: String) -> Result<(), String> {
+    app.clipboard()
+        .write_text(text)
+        .map_err(|error| format!("Failed to copy text: {error}"))
 }
 
 #[tauri::command]

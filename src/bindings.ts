@@ -799,6 +799,17 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async copyTextToClipboard(text: string): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("copy_text_to_clipboard", { text }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async setLogLevel(level: LogLevel): Promise<Result<null, string>> {
     try {
       return {
@@ -1164,6 +1175,17 @@ export const commands = {
       return {
         status: "ok",
         data: await TAURI_INVOKE("get_audio_file_path", { fileName }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async readAudioFile(fileName: string): Promise<Result<number[], string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("read_audio_file", { fileName }),
       };
     } catch (e) {
       if (e instanceof Error) throw e;
@@ -1545,7 +1567,7 @@ export type StreamTextEvent = { committed: string; tentative: string };
 export type StreamWorkKind = "transcribing" | "polishing";
 /**
  * UI appearance mode. `System` follows the OS `prefers-color-scheme`; `Light`
- * and `Dark` force one of the two palettes Handy already ships.
+ * and `Dark` force one of the two palettes FreeFlow ships.
  */
 export type Theme = "system" | "light" | "dark";
 export type TranscribeAcceleratorSetting = "auto" | "cpu" | "gpu";

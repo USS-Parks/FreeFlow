@@ -7,6 +7,7 @@ mod catalog;
 pub mod cli;
 mod clipboard;
 mod commands;
+pub mod contracts;
 mod helpers;
 mod input;
 mod llm_client;
@@ -16,6 +17,7 @@ pub mod portable;
 mod settings;
 mod shortcut;
 mod signal_handle;
+pub mod storage;
 mod transcription_coordinator;
 mod tray;
 mod tray_i18n;
@@ -576,6 +578,7 @@ pub fn run(cli_args: CliArgs) {
             commands::get_app_settings,
             commands::get_default_settings,
             commands::get_log_dir_path,
+            commands::copy_text_to_clipboard,
             commands::set_log_level,
             commands::open_recordings_folder,
             commands::open_log_dir,
@@ -614,6 +617,7 @@ pub fn run(cli_args: CliArgs) {
             commands::history::get_history_entries,
             commands::history::toggle_history_entry_saved,
             commands::history::get_audio_file_path,
+            commands::history::read_audio_file,
             commands::history::delete_history_entry,
             commands::history::retry_history_entry_transcription,
             commands::history::update_history_limit,
@@ -718,13 +722,11 @@ pub fn run(cli_args: CliArgs) {
     }
 
     builder
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_os::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_macos_permissions::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_autostart::init(
             MacosLauncher::LaunchAgent,
@@ -736,7 +738,7 @@ pub fn run(cli_args: CliArgs) {
 
             // Headless one-shot path (`--transcribe-file` / `--list-devices` /
             // `--list-models`): initialize only what transcription needs — the
-            // store/paths plugins, the model + transcription managers, and the
+            // path services, the model + transcription managers, and the
             // transcribe-cpp backend + accelerator settings — then run on a worker
             // thread and exit. Deliberately skips the window, tray, overlay, audio
             // recorder (so it never opens the mic, even with always_on_microphone),

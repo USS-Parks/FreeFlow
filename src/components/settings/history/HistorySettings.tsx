@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { readFile } from "@tauri-apps/plugin-fs";
 import { Check, Copy, FolderOpen, RotateCcw, Star, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -174,7 +173,8 @@ export const HistorySettings: React.FC = () => {
 
   const copyToClipboard = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
+      const result = await commands.copyTextToClipboard(text);
+      if (result.status !== "ok") throw new Error(String(result.error));
     } catch (error) {
       console.error("Failed to copy to clipboard:", error);
     }
@@ -186,7 +186,11 @@ export const HistorySettings: React.FC = () => {
         const result = await commands.getAudioFilePath(fileName);
         if (result.status === "ok") {
           if (osType === "linux") {
-            const fileData = await readFile(result.data);
+            const fileResult = await commands.readAudioFile(fileName);
+            if (fileResult.status !== "ok") {
+              throw new Error(String(fileResult.error));
+            }
+            const fileData = new Uint8Array(fileResult.data);
             const blob = new Blob([fileData], { type: "audio/wav" });
             return URL.createObjectURL(blob);
           }

@@ -4,8 +4,10 @@ use serde::{Deserialize, Deserializer, Serialize};
 use specta::Type;
 use std::collections::HashMap;
 use std::fmt;
+use std::sync::{Arc, Mutex, OnceLock};
 use tauri::AppHandle;
-use tauri_plugin_store::StoreExt;
+
+use crate::storage::settings_file::AtomicSettingsFile;
 
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
 pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
@@ -259,7 +261,7 @@ impl SoundTheme {
 }
 
 /// UI appearance mode. `System` follows the OS `prefers-color-scheme`; `Light`
-/// and `Dark` force one of the two palettes Handy already ships.
+/// and `Dark` force one of the two palettes FreeFlow ships.
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum Theme {
@@ -783,6 +785,17 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
 }
 
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
+static SETTINGS_IO_LOCK: OnceLock<Arc<Mutex<()>>> = OnceLock::new();
+
+fn settings_file(app: &AppHandle) -> Result<AtomicSettingsFile, String> {
+    let path = crate::portable::app_data_dir(app)
+        .map_err(|error| format!("Failed to resolve settings directory: {error}"))?
+        .join(SETTINGS_STORE_PATH);
+    let lock = SETTINGS_IO_LOCK
+        .get_or_init(|| Arc::new(Mutex::new(())))
+        .clone();
+    Ok(AtomicSettingsFile::with_lock(path, lock))
+}
 
 pub fn get_default_settings() -> AppSettings {
     #[cfg(target_os = "windows")]
@@ -936,48 +949,73 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 }
 
 pub fn get_settings(app: &AppHandle) -> AppSettings {
-    let store = app
-        .store(crate::portable::store_path(SETTINGS_STORE_PATH))
-        .expect("Failed to initialize store");
+    let default_settings = get_default_settings();
+    let default_value = match serde_json::to_value(&default_settings) {
+        Ok(value) => value,
+        Err(error) => {
+            warn!("Failed to serialize default settings: {error}");
+            return default_settings;
+        }
+    };
+    let store = match settings_file(app) {
+        Ok(store) => store,
+        Err(error) => {
+            warn!("{error}");
+            return default_settings;
+        }
+    };
+    let loaded = match store.load_or_recover(&default_value) {
+        Ok(loaded) => loaded,
+        Err(error) => {
+            warn!("Failed to load settings atomically: {error}");
+            return default_settings;
+        }
+    };
+    if let Some(path) = loaded.recovered_corrupt_path {
+        warn!(
+            "Recovered corrupt settings; preserved original at {}",
+            path.display()
+        );
+    }
+    let settings_value = loaded.value;
 
     // Settings reads also persist one-time migrations. Migration helpers are
     // idempotent, so this converges after the first read of an older store.
-    let mut settings = if let Some(settings_value) = store.get("settings") {
-        let (mut settings, mut updated) =
-            match serde_json::from_value::<AppSettings>(settings_value.clone()) {
-                Ok(settings) => (settings, false),
-                Err(e) => {
-                    warn!("Failed to parse stored settings ({e}); salvaging valid fields");
-                    (salvage_settings(&settings_value), true)
-                }
-            };
+    let (mut settings, mut updated) =
+        match serde_json::from_value::<AppSettings>(settings_value.clone()) {
+            Ok(settings) => (settings, false),
+            Err(error) => {
+                warn!("Failed to parse stored settings ({error}); salvaging valid fields");
+                (salvage_settings(&settings_value), true)
+            }
+        };
 
-        if apply_settings_migrations(&mut settings, &settings_value) {
+    if apply_settings_migrations(&mut settings, &settings_value) {
+        updated = true;
+    }
+
+    // Merge in any bindings added since this store was written.
+    for (key, value) in get_default_settings().bindings {
+        if let std::collections::hash_map::Entry::Vacant(entry) = settings.bindings.entry(key) {
+            debug!("Adding missing binding: {}", entry.key());
+            entry.insert(value);
             updated = true;
         }
-
-        // Merge in any bindings added since this store was written.
-        for (key, value) in get_default_settings().bindings {
-            if let std::collections::hash_map::Entry::Vacant(entry) = settings.bindings.entry(key) {
-                debug!("Adding missing binding: {}", entry.key());
-                entry.insert(value);
-                updated = true;
-            }
-        }
-
-        if updated {
-            store.set("settings", serde_json::to_value(&settings).unwrap());
-        }
-
-        settings
-    } else {
-        let default_settings = get_default_settings();
-        store.set("settings", serde_json::to_value(&default_settings).unwrap());
-        default_settings
-    };
+    }
 
     if ensure_post_process_defaults(&mut settings) {
-        store.set("settings", serde_json::to_value(&settings).unwrap());
+        updated = true;
+    }
+
+    if updated {
+        match serde_json::to_value(&settings) {
+            Ok(value) => {
+                if let Err(error) = store.save(&value) {
+                    warn!("Failed to persist migrated settings atomically: {error}");
+                }
+            }
+            Err(error) => warn!("Failed to serialize migrated settings: {error}"),
+        }
     }
 
     settings
@@ -1084,11 +1122,16 @@ fn apply_settings_migrations(
 }
 
 pub fn write_settings(app: &AppHandle, settings: AppSettings) {
-    let store = app
-        .store(crate::portable::store_path(SETTINGS_STORE_PATH))
-        .expect("Failed to initialize store");
-
-    store.set("settings", serde_json::to_value(&settings).unwrap());
+    let result = settings_file(app).and_then(|store| {
+        let value = serde_json::to_value(&settings)
+            .map_err(|error| format!("Failed to serialize settings: {error}"))?;
+        store
+            .save(&value)
+            .map_err(|error| format!("Failed to persist settings atomically: {error}"))
+    });
+    if let Err(error) = result {
+        warn!("{error}");
+    }
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
