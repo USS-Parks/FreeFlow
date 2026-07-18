@@ -1,6 +1,6 @@
 # ADR-0003: Consent-bound local model supply chain
 
-Status: **Accepted on Windows; FF-V1 remains in progress pending macOS live evidence**
+Status: **Accepted — verified on Windows, Apple Silicon macOS, and Intel macOS**
 
 Date: 2026-07-18
 
@@ -79,6 +79,9 @@ the Intel matrix leg installs Homebrew's bottled ONNX Runtime and points
 without changing the model path under test. Shipping or removing that imported
 runtime dependency remains packaging work and is not claimed complete here.
 
-FF-V1 is not complete because the corrected Intel macOS installation and live
-model-load result is pending. The next PSPR prompt must not start until that gate
-is satisfied or the user approves a documented re-scope.
+Corrected hosted run `29649911938` passed the complete direct-download,
+verification, installation, CPU model-load, capability, and session-creation
+path on both Apple Silicon and Intel macOS. Both used manifest digest
+`0c6a40bac30ebe258d963f76e98a49b078d1a1dd426b4d4d530c6e6bf88a7186`.
+Together with the Windows evidence above, this satisfies FF-V1. Performance and
+packaging claims remain governed by their later prompts.
