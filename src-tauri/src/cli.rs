@@ -34,13 +34,19 @@ pub struct CliArgs {
     #[arg(short = 'f', long, value_name = "WAV")]
     pub transcribe_file: Option<PathBuf>,
 
-    /// Model id to load for --transcribe-file (default: the selected model).
+    /// Evaluate a versioned public/owned corpus manifest with one model load,
+    /// emitting WER, task-success, latency, language, and memory evidence.
+    #[arg(long, value_name = "JSON")]
+    pub evaluate_corpus: Option<PathBuf>,
+
+    /// Model id to load for --transcribe-file or --evaluate-corpus (default:
+    /// the selected model).
     #[arg(long)]
     pub model: Option<String>,
 
-    /// Hard-select the compute device for --transcribe-file by its registry
-    /// index (see --list-devices). Omit to use the persisted accelerator
-    /// setting. transcribe-cpp (whisper-family) models only.
+    /// Hard-select the compute device for --transcribe-file or
+    /// --evaluate-corpus by its registry index (see --list-devices). Omit to
+    /// use the persisted accelerator setting. transcribe-cpp models only.
     #[arg(long, value_name = "N")]
     pub device_index: Option<usize>,
 
@@ -62,7 +68,7 @@ pub struct CliArgs {
     #[arg(long, value_name = "N")]
     pub repeat: Option<usize>,
 
-    /// Emit --transcribe-file results as JSON.
+    /// Emit headless results as JSON. Corpus evaluation is always JSON.
     #[arg(long)]
     pub json: bool,
 }

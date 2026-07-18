@@ -1,7 +1,7 @@
 use crate::actions::process_transcription_output;
 use crate::managers::{
     history::{HistoryManager, PaginatedHistory},
-    transcription::TranscriptionManager,
+    transcription::{TranscriptionManager, TranscriptionProgressEvent, TranscriptionProgressStage},
 };
 use std::sync::Arc;
 use tauri::{AppHandle, State};
@@ -99,28 +99,70 @@ pub async fn retry_history_entry_transcription(
     }
 
     transcription_manager.initiate_model_load();
+    TranscriptionProgressEvent::publish(
+        &app,
+        Some(id),
+        TranscriptionProgressStage::Recognizing,
+        45,
+        None,
+    );
 
     let tm = Arc::clone(&transcription_manager);
-    let transcription = tauri::async_runtime::spawn_blocking(move || tm.transcribe(samples))
+    let outcome = tauri::async_runtime::spawn_blocking(move || tm.transcribe_detailed(samples))
         .await
         .map_err(|e| format!("Transcription task panicked: {}", e))?
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| {
+            let message = e.to_string();
+            let _ = history_manager.mark_transcription_failed(id, &message);
+            TranscriptionProgressEvent::publish(
+                &app,
+                Some(id),
+                TranscriptionProgressStage::Failed,
+                100,
+                Some(message.clone()),
+            );
+            message
+        })?;
 
-    if transcription.is_empty() {
+    if outcome.text.is_empty() {
+        let _ = history_manager.mark_transcription_failed(id, "Recording contains no speech");
+        TranscriptionProgressEvent::publish(
+            &app,
+            Some(id),
+            TranscriptionProgressStage::Failed,
+            100,
+            Some("Recording contains no speech".to_string()),
+        );
         return Err("Recording contains no speech".to_string());
     }
 
+    if entry.post_process_requested {
+        TranscriptionProgressEvent::publish(
+            &app,
+            Some(id),
+            TranscriptionProgressStage::PostProcessing,
+            80,
+            None,
+        );
+    }
     let processed =
-        process_transcription_output(&app, &transcription, entry.post_process_requested).await;
+        process_transcription_output(&app, &outcome.text, entry.post_process_requested).await;
     history_manager
-        .update_transcription(
+        .complete_transcription(
             id,
-            transcription,
+            &outcome,
             processed.post_processed_text,
             processed.post_process_prompt,
         )
-        .map(|_| ())
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    TranscriptionProgressEvent::publish(
+        &app,
+        Some(id),
+        TranscriptionProgressStage::Completed,
+        100,
+        None,
+    );
+    Ok(())
 }
 
 #[tauri::command]

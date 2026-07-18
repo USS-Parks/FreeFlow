@@ -1,0 +1,156 @@
+{
+  "schema_version": 1,
+  "name": "LibriSpeech test-clean deterministic 20-speaker subset",
+  "source": "OpenSLR SLR12 test-clean.tar.gz SHA-256 39fde525e59672dc6d1551919b1478f724438a95aa55f874b576be21967e6c23",
+  "license": "CC-BY-4.0",
+  "thresholds": {
+    "max_wer": 0.12,
+    "min_task_success": 0.95,
+    "max_p50_ms": 2500,
+    "max_p95_ms": 6000,
+    "max_idle_rss_bytes": 314572800,
+    "max_loaded_rss_bytes": 3221225472
+  },
+  "items": [
+    {
+      "id": "1089-134686-0000",
+      "audio": "eval-wav/1089-134686-0000.wav",
+      "reference": "HE HOPED THERE WOULD BE STEW FOR DINNER TURNIPS AND CARROTS AND BRUISED POTATOES AND FAT MUTTON PIECES TO BE LADLED OUT IN THICK PEPPERED FLOUR FATTENED SAUCE",
+      "language": "en",
+      "required_terms": ["hoped", "there"]
+    },
+    {
+      "id": "1188-133604-0000",
+      "audio": "eval-wav/1188-133604-0000.wav",
+      "reference": "YOU WILL FIND ME CONTINUALLY SPEAKING OF FOUR MEN TITIAN HOLBEIN TURNER AND TINTORET IN ALMOST THE SAME TERMS",
+      "language": "en",
+      "required_terms": ["continually", "speaking"]
+    },
+    {
+      "id": "121-121726-0000",
+      "audio": "eval-wav/121-121726-0000.wav",
+      "reference": "ALSO A POPULAR CONTRIVANCE WHEREBY LOVE MAKING MAY BE SUSPENDED BUT NOT STOPPED DURING THE PICNIC SEASON",
+      "language": "en",
+      "required_terms": ["popular", "contrivance"]
+    },
+    {
+      "id": "1221-135766-0000",
+      "audio": "eval-wav/1221-135766-0000.wav",
+      "reference": "HOW STRANGE IT SEEMED TO THE SAD WOMAN AS SHE WATCHED THE GROWTH AND THE BEAUTY THAT BECAME EVERY DAY MORE BRILLIANT AND THE INTELLIGENCE THAT THREW ITS QUIVERING SUNSHINE OVER THE TINY FEATURES OF THIS CHILD",
+      "language": "en",
+      "required_terms": ["strange", "seemed"]
+    },
+    {
+      "id": "1284-1180-0000",
+      "audio": "eval-wav/1284-1180-0000.wav",
+      "reference": "HE WORE BLUE SILK STOCKINGS BLUE KNEE PANTS WITH GOLD BUCKLES A BLUE RUFFLED WAIST AND A JACKET OF BRIGHT BLUE BRAIDED WITH GOLD",
+      "language": "en",
+      "required_terms": ["stockings", "pants"]
+    },
+    {
+      "id": "1320-122612-0000",
+      "audio": "eval-wav/1320-122612-0000.wav",
+      "reference": "SINCE THE PERIOD OF OUR TALE THE ACTIVE SPIRIT OF THE COUNTRY HAS SURROUNDED IT WITH A BELT OF RICH AND THRIVING SETTLEMENTS THOUGH NONE BUT THE HUNTER OR THE SAVAGE IS EVER KNOWN EVEN NOW TO PENETRATE ITS WILD RECESSES",
+      "language": "en",
+      "required_terms": ["since", "period"]
+    },
+    {
+      "id": "1580-141083-0000",
+      "audio": "eval-wav/1580-141083-0000.wav",
+      "reference": "I WILL ENDEAVOUR IN MY STATEMENT TO AVOID SUCH TERMS AS WOULD SERVE TO LIMIT THE EVENTS TO ANY PARTICULAR PLACE OR GIVE A CLUE AS TO THE PEOPLE CONCERNED",
+      "language": "en",
+      "required_terms": ["endeavour", "statement"]
+    },
+    {
+      "id": "1995-1826-0000",
+      "audio": "eval-wav/1995-1826-0000.wav",
+      "reference": "IN THE DEBATE BETWEEN THE SENIOR SOCIETIES HER DEFENCE OF THE FIFTEENTH AMENDMENT HAD BEEN NOT ONLY A NOTABLE BIT OF REASONING BUT DELIVERED WITH REAL ENTHUSIASM",
+      "language": "en",
+      "required_terms": ["debate", "between"]
+    },
+    {
+      "id": "2094-142345-0000",
+      "audio": "eval-wav/2094-142345-0000.wav",
+      "reference": "IT IS A VERY FINE OLD PLACE OF RED BRICK SOFTENED BY A PALE POWDERY LICHEN WHICH HAS DISPERSED ITSELF WITH HAPPY IRREGULARITY SO AS TO BRING THE RED BRICK INTO TERMS OF FRIENDLY COMPANIONSHIP WITH THE LIMESTONE ORNAMENTS SURROUNDING THE THREE GABLES THE WINDOWS AND THE DOOR PLACE",
+      "language": "en",
+      "required_terms": ["place", "brick"]
+    },
+    {
+      "id": "2300-131720-0000",
+      "audio": "eval-wav/2300-131720-0000.wav",
+      "reference": "THE PARIS PLANT LIKE THAT AT THE CRYSTAL PALACE WAS A TEMPORARY EXHIBIT",
+      "language": "en",
+      "required_terms": ["paris", "plant"]
+    },
+    {
+      "id": "237-126133-0000",
+      "audio": "eval-wav/237-126133-0000.wav",
+      "reference": "HERE SHE WOULD STAY COMFORTED AND SOOTHED AMONG THE LOVELY PLANTS AND RICH EXOTICS REJOICING THE HEART OF OLD TURNER THE GARDENER WHO SINCE POLLY\u0027S FIRST RAPTUROUS ENTRANCE HAD TAKEN HER INTO HIS GOOD GRACES FOR ALL TIME",
+      "language": "en",
+      "required_terms": ["would", "comforted"]
+    },
+    {
+      "id": "260-123286-0000",
+      "audio": "eval-wav/260-123286-0000.wav",
+      "reference": "SATURDAY AUGUST FIFTEENTH THE SEA UNBROKEN ALL ROUND NO LAND IN SIGHT",
+      "language": "en",
+      "required_terms": ["saturday", "august"]
+    },
+    {
+      "id": "2830-3979-0000",
+      "audio": "eval-wav/2830-3979-0000.wav",
+      "reference": "WE WANT YOU TO HELP US PUBLISH SOME LEADING WORK OF LUTHER\u0027S FOR THE GENERAL AMERICAN MARKET WILL YOU DO IT",
+      "language": "en",
+      "required_terms": ["publish", "leading"]
+    },
+    {
+      "id": "2961-960-0000",
+      "audio": "eval-wav/2961-960-0000.wav",
+      "reference": "HE PASSES ABRUPTLY FROM PERSONS TO IDEAS AND NUMBERS AND FROM IDEAS AND NUMBERS TO PERSONS FROM THE HEAVENS TO MAN FROM ASTRONOMY TO PHYSIOLOGY HE CONFUSES OR RATHER DOES NOT DISTINGUISH SUBJECT AND OBJECT FIRST AND FINAL CAUSES AND IS DREAMING OF GEOMETRICAL FIGURES LOST IN A FLUX OF SENSE",
+      "language": "en",
+      "required_terms": ["passes", "abruptly"]
+    },
+    {
+      "id": "3570-5694-0000",
+      "audio": "eval-wav/3570-5694-0000.wav",
+      "reference": "BUT ALREADY AT A POINT IN ECONOMIC EVOLUTION FAR ANTEDATING THE EMERGENCE OF THE LADY SPECIALISED CONSUMPTION OF GOODS AS AN EVIDENCE OF PECUNIARY STRENGTH HAD BEGUN TO WORK OUT IN A MORE OR LESS ELABORATE SYSTEM",
+      "language": "en",
+      "required_terms": ["already", "point"]
+    },
+    {
+      "id": "3575-170457-0000",
+      "audio": "eval-wav/3575-170457-0000.wav",
+      "reference": "AND OFTEN HAS MY MOTHER SAID WHILE ON HER LAP I LAID MY HEAD SHE FEARED FOR TIME I WAS NOT MADE BUT FOR ETERNITY",
+      "language": "en",
+      "required_terms": ["often", "mother"]
+    },
+    {
+      "id": "3729-6852-0000",
+      "audio": "eval-wav/3729-6852-0000.wav",
+      "reference": "TO CELEBRATE THE ARRIVAL OF HER SON SILVIA GAVE A SPLENDID SUPPER TO WHICH SHE HAD INVITED ALL HER RELATIVES AND IT WAS A GOOD OPPORTUNITY FOR ME TO MAKE THEIR ACQUAINTANCE",
+      "language": "en",
+      "required_terms": ["celebrate", "arrival"]
+    },
+    {
+      "id": "4077-13751-0000",
+      "audio": "eval-wav/4077-13751-0000.wav",
+      "reference": "ON THE SIXTH OF APRIL EIGHTEEN THIRTY THE CHURCH OF JESUS CHRIST OF LATTER DAY SAINTS WAS FORMALLY ORGANIZED AND THUS TOOK ON A LEGAL EXISTENCE",
+      "language": "en",
+      "required_terms": ["sixth", "april"]
+    },
+    {
+      "id": "4446-2271-0000",
+      "audio": "eval-wav/4446-2271-0000.wav",
+      "reference": "MAINHALL LIKED ALEXANDER BECAUSE HE WAS AN ENGINEER",
+      "language": "en",
+      "required_terms": ["mainhall", "liked"]
+    },
+    {
+      "id": "4507-16021-0000",
+      "audio": "eval-wav/4507-16021-0000.wav",
+      "reference": "CHAPTER ONE ORIGIN",
+      "language": "en",
+      "required_terms": ["chapter", "origin"]
+    }
+  ]
+}

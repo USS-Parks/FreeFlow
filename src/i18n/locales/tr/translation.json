@@ -445,7 +445,8 @@
       "retranscribe": "Yeniden yazıya dök",
       "retranscribeError": "Yeniden yazıya dökme başarısız oldu. Lütfen tekrar deneyin.",
       "transcribing": "Yazıya döküyor...",
-      "transcriptionFailed": "Transkripsiyon başarısız oldu. Yeniden deneme simgesini kullanarak tekrar yazıya dökebilirsiniz."
+      "transcriptionFailed": "Transkripsiyon başarısız oldu. Yeniden deneme simgesini kullanarak tekrar yazıya dökebilirsiniz.",
+      "rawTranscript": "Raw engine transcript"
     },
     "debug": {
       "title": "Hata Ayıklama",

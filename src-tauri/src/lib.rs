@@ -1,6 +1,7 @@
 mod actions;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod apple_intelligence;
+mod asr_evaluation;
 mod audio_feedback;
 pub mod audio_toolkit;
 mod catalog;
@@ -383,6 +384,10 @@ fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
         }
     }
 
+    if let Some(manifest_path) = args.evaluate_corpus.as_deref() {
+        return run_headless_corpus_evaluation(app, args, manifest_path);
+    }
+
     let Some(wav) = args.transcribe_file.clone() else {
         return 0;
     };
@@ -451,7 +456,7 @@ fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
 
     let runs = args.repeat.unwrap_or(1).max(1);
     let mut times_ms: Vec<u64> = Vec::new();
-    let mut text = String::new();
+    let mut last_outcome = None;
     for i in 0..runs {
         // If the model's unload-timeout is "Immediately", transcribe() unloads
         // the engine after each run; reload (untimed) so repeats keep working
@@ -463,8 +468,8 @@ fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
             }
         }
         let t = Instant::now();
-        match tm.transcribe(samples.clone()) {
-            Ok(out) => text = out,
+        match tm.transcribe_detailed(samples.clone()) {
+            Ok(outcome) => last_outcome = Some(outcome),
             Err(e) => {
                 eprintln!("error: transcribe failed: {}", e);
                 return 1;
@@ -478,6 +483,7 @@ fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
     } else {
         0.0
     };
+    let outcome = last_outcome.expect("at least one transcription run");
 
     if args.json {
         println!(
@@ -491,7 +497,11 @@ fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
                 "transcribe_ms": times_ms,
                 "best_ms": best_ms,
                 "rtf": rtf,
-                "text": text,
+                "raw_text": outcome.raw_text,
+                "text": outcome.text,
+                "requested_language": outcome.requested_language,
+                "effective_language": outcome.effective_language,
+                "detected_language": outcome.detected_language,
             })
         );
     } else {
@@ -505,9 +515,209 @@ fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
             best_ms,
             rtf,
         );
-        println!("text: {}", text);
+        println!("text: {}", outcome.text);
     }
     0
+}
+
+fn read_evaluation_wav(path: &std::path::Path) -> Result<Vec<f32>, String> {
+    let reader = hound::WavReader::open(path)
+        .map_err(|error| format!("cannot open {}: {error}", path.display()))?;
+    let spec = reader.spec();
+    if spec.sample_rate != 16_000
+        || spec.channels != 1
+        || spec.bits_per_sample != 16
+        || spec.sample_format != hound::SampleFormat::Int
+    {
+        return Err(format!(
+            "expected 16 kHz mono 16-bit PCM WAV for {}, got {} Hz / {} ch / {}-bit {:?}",
+            path.display(),
+            spec.sample_rate,
+            spec.channels,
+            spec.bits_per_sample,
+            spec.sample_format
+        ));
+    }
+    crate::audio_toolkit::read_wav_samples(path)
+        .map_err(|error| format!("failed to read {}: {error}", path.display()))
+}
+
+fn run_headless_corpus_evaluation(
+    app: &AppHandle,
+    args: &CliArgs,
+    manifest_path: &std::path::Path,
+) -> i32 {
+    use crate::asr_evaluation::{
+        percentile, required_terms_present, resident_memory_bytes, word_errors, EvaluationSummary,
+        EvaluationThresholdsResult, ItemScore,
+    };
+
+    let manifest = match crate::asr_evaluation::load_manifest(manifest_path) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            eprintln!("error: {error:#}");
+            return 2;
+        }
+    };
+    let model_id = args
+        .model
+        .clone()
+        .unwrap_or_else(|| get_settings(app).selected_model);
+    if model_id.is_empty() {
+        eprintln!("error: no model selected (pass --model or pick one in the app)");
+        return 2;
+    }
+
+    let manager = app.state::<Arc<TranscriptionManager>>();
+    let resident_memory_before_load_bytes = resident_memory_bytes();
+    if let Err(error) = manager.load_model_with_device(&model_id, args.device_index) {
+        eprintln!("error: load_model('{model_id}') failed: {error}");
+        return 1;
+    }
+    let resident_memory_after_load_bytes = resident_memory_bytes();
+    let manifest_dir = manifest_path
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let mut scores = Vec::with_capacity(manifest.items.len());
+    let mut aggregate_raw_errors = crate::asr_evaluation::WordErrors::default();
+    let mut aggregate_corrected_errors = crate::asr_evaluation::WordErrors::default();
+    let mut successful_tasks = 0usize;
+    let mut latencies = Vec::with_capacity(manifest.items.len());
+
+    for item in &manifest.items {
+        let audio_path = if item.audio.is_absolute() {
+            item.audio.clone()
+        } else {
+            manifest_dir.join(&item.audio)
+        };
+        let samples = match read_evaluation_wav(&audio_path) {
+            Ok(samples) if !samples.is_empty() => samples,
+            Ok(_) => {
+                eprintln!("error: corpus item '{}' has no samples", item.id);
+                return 2;
+            }
+            Err(error) => {
+                eprintln!("error: corpus item '{}': {error}", item.id);
+                return 2;
+            }
+        };
+        if !manager.is_model_loaded() {
+            if let Err(error) = manager.load_model_with_device(&model_id, args.device_index) {
+                eprintln!(
+                    "error: reload before corpus item '{}' failed: {error}",
+                    item.id
+                );
+                return 1;
+            }
+        }
+        let outcome =
+            match manager.transcribe_detailed_with_language(samples, item.language.clone()) {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    eprintln!(
+                        "error: corpus item '{}' transcription failed: {error}",
+                        item.id
+                    );
+                    return 1;
+                }
+            };
+        let raw_errors = word_errors(&item.reference, &outcome.raw_text);
+        let corrected_errors = word_errors(&item.reference, &outcome.text);
+        aggregate_raw_errors.substitutions += raw_errors.substitutions;
+        aggregate_raw_errors.deletions += raw_errors.deletions;
+        aggregate_raw_errors.insertions += raw_errors.insertions;
+        aggregate_raw_errors.reference_words += raw_errors.reference_words;
+        aggregate_corrected_errors.substitutions += corrected_errors.substitutions;
+        aggregate_corrected_errors.deletions += corrected_errors.deletions;
+        aggregate_corrected_errors.insertions += corrected_errors.insertions;
+        aggregate_corrected_errors.reference_words += corrected_errors.reference_words;
+        let task_success = required_terms_present(&outcome.text, &item.required_terms);
+        successful_tasks += usize::from(task_success);
+        latencies.push(outcome.transcription_ms);
+        scores.push(ItemScore {
+            id: item.id.clone(),
+            audio: audio_path.display().to_string(),
+            reference: item.reference.clone(),
+            hypothesis: outcome.text,
+            raw_hypothesis: outcome.raw_text,
+            requested_language: outcome.requested_language,
+            effective_language: outcome.effective_language,
+            detected_language: outcome.detected_language,
+            raw_substitutions: raw_errors.substitutions,
+            raw_deletions: raw_errors.deletions,
+            raw_insertions: raw_errors.insertions,
+            raw_wer: raw_errors.wer(),
+            corrected_substitutions: corrected_errors.substitutions,
+            corrected_deletions: corrected_errors.deletions,
+            corrected_insertions: corrected_errors.insertions,
+            reference_words: corrected_errors.reference_words,
+            corrected_wer: corrected_errors.wer(),
+            task_success,
+            audio_duration_ms: outcome.audio_duration_ms,
+            transcription_ms: outcome.transcription_ms,
+            real_time_factor: outcome.real_time_factor,
+        });
+    }
+
+    let raw_wer = aggregate_raw_errors.wer();
+    let corrected_wer = aggregate_corrected_errors.wer();
+    let task_success = successful_tasks as f64 / scores.len() as f64;
+    let latency_p50_ms = percentile(&latencies, 0.50);
+    let latency_p95_ms = percentile(&latencies, 0.95);
+    let resident_memory_after_evaluation_bytes = resident_memory_bytes();
+    let thresholds = EvaluationThresholdsResult {
+        max_wer: manifest.thresholds.max_wer,
+        min_task_success: manifest.thresholds.min_task_success,
+        max_p50_ms: manifest.thresholds.max_p50_ms,
+        max_p95_ms: manifest.thresholds.max_p95_ms,
+        max_idle_rss_bytes: manifest.thresholds.max_idle_rss_bytes,
+        max_loaded_rss_bytes: manifest.thresholds.max_loaded_rss_bytes,
+        raw_wer_passed: raw_wer <= manifest.thresholds.max_wer,
+        task_success_passed: task_success >= manifest.thresholds.min_task_success,
+        p50_passed: latency_p50_ms <= manifest.thresholds.max_p50_ms,
+        p95_passed: latency_p95_ms <= manifest.thresholds.max_p95_ms,
+        idle_rss_passed: resident_memory_before_load_bytes
+            .is_some_and(|bytes| bytes <= manifest.thresholds.max_idle_rss_bytes),
+        loaded_rss_passed: resident_memory_after_load_bytes
+            .into_iter()
+            .chain(resident_memory_after_evaluation_bytes)
+            .all(|bytes| bytes <= manifest.thresholds.max_loaded_rss_bytes)
+            && resident_memory_after_load_bytes.is_some()
+            && resident_memory_after_evaluation_bytes.is_some(),
+    };
+    let passed = thresholds.raw_wer_passed
+        && thresholds.task_success_passed
+        && thresholds.p50_passed
+        && thresholds.p95_passed
+        && thresholds.idle_rss_passed
+        && thresholds.loaded_rss_passed;
+    let summary = EvaluationSummary {
+        schema_version: 1,
+        corpus_name: manifest.name,
+        corpus_source: manifest.source,
+        corpus_license: manifest.license,
+        model_id,
+        item_count: scores.len(),
+        raw_wer,
+        corrected_wer,
+        task_success,
+        latency_p50_ms,
+        latency_p95_ms,
+        resident_memory_before_load_bytes,
+        resident_memory_after_load_bytes,
+        resident_memory_after_evaluation_bytes,
+        thresholds,
+        passed,
+        items: scores,
+    };
+    match serde_json::to_string_pretty(&summary) {
+        Ok(json) => println!("{json}"),
+        Err(error) => {
+            eprintln!("error: failed to serialize corpus result: {error}");
+            return 1;
+        }
+    }
+    i32::from(!passed)
 }
 
 fn run_headless_audio_verification(
@@ -730,6 +940,7 @@ pub fn run(cli_args: CliArgs) {
         ])
         .events(collect_events![
             managers::history::HistoryUpdatePayload,
+            managers::transcription::TranscriptionProgressEvent,
             managers::transcription::StreamTextEvent,
             managers::transcription::StreamPhaseEvent,
             transcription_coordinator::DictationStateEvent,
@@ -748,6 +959,7 @@ pub fn run(cli_args: CliArgs) {
     // The headless path must run as its own instance (see the single-instance
     // note below), not forward to an already-running app.
     let headless_mode = cli_args.transcribe_file.is_some()
+        || cli_args.evaluate_corpus.is_some()
         || cli_args.list_devices
         || cli_args.list_models
         || cli_args.verify_audio.is_some();

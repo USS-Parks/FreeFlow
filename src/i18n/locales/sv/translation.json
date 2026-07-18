@@ -445,7 +445,8 @@
       "retranscribe": "Transkribera igen",
       "retranscribeError": "Misslyckades med att transkribera igen. Försök igen.",
       "transcribing": "Transkriberar...",
-      "transcriptionFailed": "Transkribering misslyckades. Du kan transkribera igen med hjälp av ikonen för nytt försök."
+      "transcriptionFailed": "Transkribering misslyckades. Du kan transkribera igen med hjälp av ikonen för nytt försök.",
+      "rawTranscript": "Raw engine transcript"
     },
     "debug": {
       "title": "Felsökning",

@@ -348,9 +348,18 @@ mod tests {
             saved: false,
             title: "Recording".to_string(),
             transcription_text: transcription.to_string(),
+            raw_transcript: transcription.to_string(),
             post_processed_text: post_processed.map(|text| text.to_string()),
             post_process_prompt: None,
             post_process_requested: false,
+            model_id: None,
+            requested_language: None,
+            effective_language: None,
+            detected_language: None,
+            audio_duration_ms: None,
+            transcription_ms: None,
+            transcription_status: "completed".to_string(),
+            transcription_error: None,
         }
     }
 

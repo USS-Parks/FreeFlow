@@ -36,6 +36,33 @@ pub const HISTORY_MIGRATIONS: &[ReversibleMigration] = &[
         up_sql: "ALTER TABLE transcription_history ADD COLUMN post_process_requested BOOLEAN NOT NULL DEFAULT 0;",
         down_sql: "ALTER TABLE transcription_history DROP COLUMN post_process_requested;",
     },
+    ReversibleMigration {
+        version: 5,
+        up_sql: "ALTER TABLE transcription_history ADD COLUMN raw_transcript TEXT NOT NULL DEFAULT '';
+            ALTER TABLE transcription_history ADD COLUMN model_id TEXT;
+            ALTER TABLE transcription_history ADD COLUMN requested_language TEXT;
+            ALTER TABLE transcription_history ADD COLUMN effective_language TEXT;
+            ALTER TABLE transcription_history ADD COLUMN detected_language TEXT;
+            ALTER TABLE transcription_history ADD COLUMN audio_duration_ms INTEGER;
+            ALTER TABLE transcription_history ADD COLUMN transcription_ms INTEGER;
+            ALTER TABLE transcription_history ADD COLUMN transcription_status TEXT NOT NULL DEFAULT 'pending';
+            ALTER TABLE transcription_history ADD COLUMN transcription_error TEXT;
+            UPDATE transcription_history
+            SET raw_transcript = transcription_text,
+                transcription_status = CASE
+                    WHEN transcription_text = '' THEN 'pending'
+                    ELSE 'completed'
+                END;",
+        down_sql: "ALTER TABLE transcription_history DROP COLUMN transcription_error;
+            ALTER TABLE transcription_history DROP COLUMN transcription_status;
+            ALTER TABLE transcription_history DROP COLUMN transcription_ms;
+            ALTER TABLE transcription_history DROP COLUMN audio_duration_ms;
+            ALTER TABLE transcription_history DROP COLUMN detected_language;
+            ALTER TABLE transcription_history DROP COLUMN effective_language;
+            ALTER TABLE transcription_history DROP COLUMN requested_language;
+            ALTER TABLE transcription_history DROP COLUMN model_id;
+            ALTER TABLE transcription_history DROP COLUMN raw_transcript;",
+    },
 ];
 
 pub struct MigrationRunner<'a> {
@@ -132,7 +159,7 @@ mod tests {
         runner
             .migrate_to_latest(&mut conn)
             .expect("migrate forward");
-        assert_eq!(MigrationRunner::current_version(&conn).expect("version"), 4);
+        assert_eq!(MigrationRunner::current_version(&conn).expect("version"), 5);
         conn.execute(
             "INSERT INTO transcription_history (
                 file_name, timestamp, saved, title, transcription_text,
@@ -219,7 +246,7 @@ mod tests {
             .expect("idempotent restart migration");
         assert_eq!(
             MigrationRunner::current_version(&reopened).expect("version"),
-            4
+            5
         );
         let text: String = reopened
             .query_row(
@@ -229,5 +256,36 @@ mod tests {
             )
             .expect("read persistent row");
         assert_eq!(text, "persisted");
+    }
+
+    #[test]
+    fn raw_transcript_migration_backfills_existing_rows() {
+        let runner = MigrationRunner::new(HISTORY_MIGRATIONS).expect("valid history migrations");
+        let mut conn = Connection::open_in_memory().expect("open database");
+        runner
+            .migrate_to(&mut conn, 4)
+            .expect("migrate to legacy schema");
+        conn.execute(
+            "INSERT INTO transcription_history (
+                file_name, timestamp, saved, title, transcription_text,
+                post_processed_text, post_process_prompt, post_process_requested
+            ) VALUES ('legacy.wav', 1, 0, 'legacy', 'raw words', 'clean words', NULL, 1)",
+            [],
+        )
+        .expect("insert legacy row");
+
+        runner
+            .migrate_to_latest(&mut conn)
+            .expect("migrate to FF-V3 schema");
+        let (raw, status): (String, String) = conn
+            .query_row(
+                "SELECT raw_transcript, transcription_status
+                 FROM transcription_history WHERE file_name = 'legacy.wav'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("read migrated row");
+        assert_eq!(raw, "raw words");
+        assert_eq!(status, "completed");
     }
 }

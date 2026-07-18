@@ -5,8 +5,9 @@ use crate::audio_toolkit::{is_microphone_access_denied, is_no_input_device_error
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::model::ModelManager;
-use crate::managers::transcription::StreamWorkKind;
-use crate::managers::transcription::TranscriptionManager;
+use crate::managers::transcription::{
+    StreamWorkKind, TranscriptionManager, TranscriptionProgressEvent, TranscriptionProgressStage,
+};
 use crate::settings::{get_settings, AppSettings, OverlayStyle, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
@@ -796,6 +797,16 @@ impl ShortcutAction for TranscribeAction {
                         None
                     };
 
+                    if let Some(entry) = &pending_entry {
+                        TranscriptionProgressEvent::publish(
+                            &ah,
+                            Some(entry.id),
+                            TranscriptionProgressStage::AudioPersisted,
+                            20,
+                            None,
+                        );
+                    }
+
                     if !wav_saved {
                         error!(
                             "Aborting transcription because the source recording was not persisted"
@@ -820,22 +831,37 @@ impl ShortcutAction for TranscribeAction {
 
                     // If a live stream was running, finalize it and use its text;
                     // otherwise batch-transcribe the same committed samples.
+                    TranscriptionProgressEvent::publish(
+                        &ah,
+                        pending_entry.as_ref().map(|entry| entry.id),
+                        TranscriptionProgressStage::Recognizing,
+                        45,
+                        None,
+                    );
                     let transcription_time = Instant::now();
-                    let transcription_result = match tm.finalize_stream() {
-                        Ok(Some(text)) if !text.trim().is_empty() => Ok(text),
-                        Ok(_) => tm.transcribe(samples),
-                        Err(err) => Err(err),
-                    };
+                    let transcription_result =
+                        match tm.finalize_stream(sample_count, transcription_time) {
+                            Ok(Some(outcome)) if !outcome.text.trim().is_empty() => Ok(outcome),
+                            Ok(_) => tm.transcribe_detailed(samples),
+                            Err(err) => Err(err),
+                        };
 
                     match transcription_result {
-                        Ok(transcription) => {
+                        Ok(outcome) => {
                             debug!(
                                 "Transcription completed in {:?}: '{}'",
                                 transcription_time.elapsed(),
-                                transcription
+                                outcome.text
                             );
 
                             if post_process {
+                                TranscriptionProgressEvent::publish(
+                                    &ah,
+                                    pending_entry.as_ref().map(|entry| entry.id),
+                                    TranscriptionProgressStage::PostProcessing,
+                                    80,
+                                    None,
+                                );
                                 if use_streaming_overlay {
                                     tm.emit_stream_working(StreamWorkKind::Polishing);
                                 } else {
@@ -843,7 +869,7 @@ impl ShortcutAction for TranscribeAction {
                                 }
                             }
                             let Some(processed) = complete_unless_cancelled(
-                                process_transcription_output(&ah, &transcription, post_process),
+                                process_transcription_output(&ah, &outcome.text, post_process),
                                 || rm.was_cancelled_since(cancel_generation),
                             )
                             .await
@@ -874,15 +900,22 @@ impl ShortcutAction for TranscribeAction {
                             }
 
                             if let Some(entry) = &pending_entry {
-                                if let Err(err) = hm.update_transcription(
+                                if let Err(err) = hm.complete_transcription(
                                     entry.id,
-                                    transcription,
+                                    &outcome,
                                     processed.post_processed_text.clone(),
                                     processed.post_process_prompt.clone(),
                                 ) {
                                     error!("Failed to complete retryable history entry: {}", err);
                                 }
                             }
+                            TranscriptionProgressEvent::publish(
+                                &ah,
+                                pending_entry.as_ref().map(|entry| entry.id),
+                                TranscriptionProgressStage::Completed,
+                                100,
+                                None,
+                            );
 
                             if processed.final_text.is_empty() {
                                 utils::hide_recording_overlay(&ah);
@@ -937,6 +970,23 @@ impl ShortcutAction for TranscribeAction {
                             }
 
                             error!("Transcription failed: {}", err);
+                            TranscriptionProgressEvent::publish(
+                                &ah,
+                                pending_entry.as_ref().map(|entry| entry.id),
+                                TranscriptionProgressStage::Failed,
+                                100,
+                                Some(err.to_string()),
+                            );
+                            if let Some(entry) = &pending_entry {
+                                if let Err(history_error) =
+                                    hm.mark_transcription_failed(entry.id, &err.to_string())
+                                {
+                                    error!(
+                                        "Failed to retain transcription error for retry: {}",
+                                        history_error
+                                    );
+                                }
+                            }
                             // Surface the failure to the UI (toast). The full
                             // message is also in freeflow.log via the line above.
                             let _ = ah.emit("transcription-error", err.to_string());

@@ -424,7 +424,8 @@
       "retranscribe": "إعادة النسخ",
       "retranscribeError": "فشلت إعادة النسخ. يرجى المحاولة مرة أخرى.",
       "transcribing": "جارٍ النسخ...",
-      "transcriptionFailed": "فشل النسخ. يمكنك إعادة النسخ باستخدام أيقونة إعادة المحاولة."
+      "transcriptionFailed": "فشل النسخ. يمكنك إعادة النسخ باستخدام أيقونة إعادة المحاولة.",
+      "rawTranscript": "Raw engine transcript"
     },
     "debug": {
       "title": "تصحيح الأخطاء",

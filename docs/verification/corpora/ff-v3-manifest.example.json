@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "name": "Replace with corpus name and immutable revision",
+  "source": "Replace with public URL/revision or owned-consent evidence ID",
+  "license": "Replace with SPDX identifier or consent evidence ID",
+  "thresholds": {
+    "max_wer": 0.12,
+    "min_task_success": 0.95,
+    "max_p50_ms": 2500,
+    "max_p95_ms": 6000,
+    "max_idle_rss_bytes": 314572800,
+    "max_loaded_rss_bytes": 3221225472
+  },
+  "items": [
+    {
+      "id": "replace-with-stable-item-id",
+      "audio": "audio/replace-with-16khz-mono-pcm.wav",
+      "reference": "Marigold begins this sentence.",
+      "language": "en",
+      "required_terms": ["Marigold", "begins"]
+    }
+  ]
+}

@@ -262,7 +262,13 @@ export const HistorySettings: React.FC = () => {
                 key={entry.id}
                 entry={entry}
                 onToggleSaved={() => toggleSaved(entry.id)}
-                onCopyText={() => copyToClipboard(entry.transcription_text)}
+                onCopyText={() =>
+                  copyToClipboard(
+                    entry.post_processed_text?.trim().length
+                      ? entry.post_processed_text
+                      : entry.transcription_text,
+                  )
+                }
                 getAudioUrl={getAudioUrl}
                 deleteAudio={deleteAudioEntry}
                 retryTranscription={retryHistoryEntry}
@@ -319,7 +325,13 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   const [showCopied, setShowCopied] = useState(false);
   const [retrying, setRetrying] = useState(false);
 
-  const hasTranscription = entry.transcription_text.trim().length > 0;
+  const displayedText = entry.post_processed_text?.trim().length
+    ? entry.post_processed_text
+    : entry.transcription_text;
+  const hasTranscription = displayedText.trim().length > 0;
+  const rawDiffers =
+    entry.raw_transcript.trim().length > 0 &&
+    entry.raw_transcript.trim() !== displayedText.trim();
 
   const handleLoadAudio = useCallback(
     () => getAudioUrl(entry.file_name),
@@ -441,9 +453,21 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
         {retrying
           ? t("settings.history.transcribing")
           : hasTranscription
-            ? entry.transcription_text
-            : t("settings.history.transcriptionFailed")}
+            ? displayedText
+            : entry.transcription_error ||
+              t("settings.history.transcriptionFailed")}
       </p>
+
+      {rawDiffers && (
+        <details className="text-xs text-text/60">
+          <summary className="cursor-pointer select-none">
+            {t("settings.history.rawTranscript")}
+          </summary>
+          <p className="mt-2 select-text whitespace-pre-wrap break-words">
+            {entry.raw_transcript}
+          </p>
+        </details>
+      )}
 
       <AudioPlayer onLoadRequest={handleLoadAudio} className="w-full" />
     </div>

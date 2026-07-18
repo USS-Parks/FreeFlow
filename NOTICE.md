@@ -76,3 +76,22 @@ FreeFlow can install, but does not bundle or redistribute, the pinned
 
 FreeFlow presents these separate license scopes and their source URLs before a
 user can approve either a direct transfer or a verified manual installation.
+
+## FF-V3 LibriSpeech evaluation references
+
+FreeFlow retains an evaluation manifest and machine-readable result for a
+20-speaker subset of the LibriSpeech `test-clean` corpus. Audio is not committed.
+
+- Resource: OpenSLR SLR12, LibriSpeech ASR corpus
+- Source: https://www.openslr.org/12
+- Corpus authors: Vassil Panayotov, Guoguo Chen, Daniel Povey, and Sanjeev
+  Khudanpur
+- Source material: LibriVox public-domain audiobooks aligned to Project
+  Gutenberg texts
+- License: Creative Commons Attribution 4.0 International (`CC-BY-4.0`)
+- Verified archive MD5: `32fa31d27d2e1cad72775fee3f4849a9`
+- Verified archive SHA-256:
+  `39fde525e59672dc6d1551919b1478f724438a95aa55f874b576be21967e6c23`
+
+The corpus is used only for independent local-ASR measurement and does not
+originate from Wispr Flow or any proprietary observation.

@@ -1307,11 +1307,13 @@ export const events = __makeEvents__<{
   historyUpdatePayload: HistoryUpdatePayload;
   streamPhaseEvent: StreamPhaseEvent;
   streamTextEvent: StreamTextEvent;
+  transcriptionProgressEvent: TranscriptionProgressEvent;
 }>({
   dictationStateEvent: "dictation-state-event",
   historyUpdatePayload: "history-update-payload",
   streamPhaseEvent: "stream-phase-event",
   streamTextEvent: "stream-text-event",
+  transcriptionProgressEvent: "transcription-progress-event",
 });
 
 /** user-defined constants **/
@@ -1456,9 +1458,18 @@ export type HistoryEntry = {
   saved: boolean;
   title: string;
   transcription_text: string;
+  raw_transcript: string;
   post_processed_text: string | null;
   post_process_prompt: string | null;
   post_process_requested: boolean;
+  model_id: string | null;
+  requested_language: string | null;
+  effective_language: string | null;
+  detected_language: string | null;
+  audio_duration_ms: number | null;
+  transcription_ms: number | null;
+  transcription_status: string;
+  transcription_error: string | null;
 };
 export type HistoryUpdatePayload =
   | { action: "added"; entry: HistoryEntry }
@@ -1664,6 +1675,18 @@ export type StreamPhaseEvent = {
  * volatile suffix the model may still rewrite.
  */
 export type StreamTextEvent = { committed: string; tentative: string };
+export type TranscriptionProgressEvent = {
+  history_id: number | null;
+  stage: TranscriptionProgressStage;
+  progress_percent: number;
+  error: string | null;
+};
+export type TranscriptionProgressStage =
+  | "audio_persisted"
+  | "recognizing"
+  | "post_processing"
+  | "completed"
+  | "failed";
 /**
  * Semantic kind of "working" phase, used to localize the spinner label.
  */

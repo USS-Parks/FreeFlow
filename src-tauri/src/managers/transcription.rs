@@ -44,6 +44,58 @@ pub struct ModelStateEvent {
     pub error: Option<String>,
 }
 
+/// Durable metadata for one local-ASR run. `raw_text` is copied directly from
+/// the engine before FreeFlow's deterministic custom-word correction; `text`
+/// is the corrected ASR text handed to optional post-processing.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
+pub struct TranscriptionOutcome {
+    pub raw_text: String,
+    pub text: String,
+    pub model_id: String,
+    pub requested_language: String,
+    pub effective_language: String,
+    pub detected_language: Option<String>,
+    pub audio_duration_ms: u64,
+    pub transcription_ms: u64,
+    pub real_time_factor: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum TranscriptionProgressStage {
+    AudioPersisted,
+    Recognizing,
+    PostProcessing,
+    Completed,
+    Failed,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Type, tauri_specta::Event)]
+pub struct TranscriptionProgressEvent {
+    pub history_id: Option<i64>,
+    pub stage: TranscriptionProgressStage,
+    pub progress_percent: u8,
+    pub error: Option<String>,
+}
+
+impl TranscriptionProgressEvent {
+    pub fn publish(
+        app: &AppHandle,
+        history_id: Option<i64>,
+        stage: TranscriptionProgressStage,
+        progress_percent: u8,
+        error: Option<String>,
+    ) {
+        let _ = Self {
+            history_id,
+            stage,
+            progress_percent: progress_percent.min(100),
+            error,
+        }
+        .emit(app);
+    }
+}
+
 /// Live transcription snapshot emitted to the overlay during a streaming run.
 /// `committed` is the append-only, flicker-free prefix; `tentative` is the
 /// volatile suffix the model may still rewrite.
@@ -1044,7 +1096,11 @@ impl TranscriptionManager {
     /// to batch transcription. `Err` means finalize itself failed or timed out.
     /// A timeout may still leave the worker holding the engine, so callers
     /// should surface it instead of immediately starting a batch fallback.
-    pub fn finalize_stream(&self) -> Result<Option<String>> {
+    pub fn finalize_stream(
+        &self,
+        audio_len: usize,
+        started_at: Instant,
+    ) -> Result<Option<TranscriptionOutcome>> {
         let Some(tx) = self.router.take() else {
             return Ok(None);
         };
@@ -1066,12 +1122,32 @@ impl TranscriptionManager {
         };
 
         let settings = get_settings(&self.app_handle);
+        let model_id = self
+            .get_current_model()
+            .unwrap_or_else(|| settings.selected_model.clone());
+        let effective_language =
+            effective_language_for_model(&settings, self.model_manager.as_ref(), &model_id);
         // Streaming models do not receive a decode prompt, so custom words
         // always go through the shared fuzzy post-correction path.
-        let filtered = post_process_transcription_text(raw, &settings, false);
+        let filtered = post_process_transcription_text(raw.clone(), &settings, false);
+        let elapsed_secs = started_at.elapsed().as_secs_f64();
+        let audio_secs = audio_len as f64 / 16_000.0;
+        let outcome = TranscriptionOutcome {
+            raw_text: raw,
+            text: filtered,
+            model_id,
+            requested_language: settings.selected_language,
+            effective_language,
+            // The streaming text API does not currently expose its language-ID
+            // output. Do not mislabel an effective hint as detected language.
+            detected_language: None,
+            audio_duration_ms: (audio_secs * 1_000.0).round() as u64,
+            transcription_ms: (elapsed_secs * 1_000.0).round() as u64,
+            real_time_factor: real_time_factor(audio_secs, elapsed_secs),
+        };
 
         self.maybe_unload_immediately("streaming transcription");
-        Ok(Some(filtered))
+        Ok(Some(outcome))
     }
 
     /// Abandon any active stream without producing text (e.g. on cancel).
@@ -1099,7 +1175,15 @@ impl TranscriptionManager {
         .emit(&self.app_handle);
     }
 
-    pub fn transcribe(&self, audio: Vec<f32>) -> Result<String> {
+    pub fn transcribe_detailed(&self, audio: Vec<f32>) -> Result<TranscriptionOutcome> {
+        self.transcribe_detailed_with_language(audio, None)
+    }
+
+    pub fn transcribe_detailed_with_language(
+        &self,
+        audio: Vec<f32>,
+        requested_language: Option<String>,
+    ) -> Result<TranscriptionOutcome> {
         #[cfg(debug_assertions)]
         if std::env::var("HANDY_FORCE_TRANSCRIPTION_FAILURE").is_ok() {
             return Err(anyhow::anyhow!(
@@ -1118,7 +1202,17 @@ impl TranscriptionManager {
         if audio.is_empty() {
             debug!("Empty audio vector");
             self.maybe_unload_immediately("empty audio");
-            return Ok(String::new());
+            return Ok(TranscriptionOutcome {
+                raw_text: String::new(),
+                text: String::new(),
+                model_id: self.get_current_model().unwrap_or_default(),
+                requested_language: String::new(),
+                effective_language: String::new(),
+                detected_language: None,
+                audio_duration_ms: 0,
+                transcription_ms: 0,
+                real_time_factor: 0.0,
+            });
         }
 
         // Check if model is loaded, if not try to load it
@@ -1136,7 +1230,10 @@ impl TranscriptionManager {
         }
 
         // Get current settings for configuration
-        let settings = get_settings(&self.app_handle);
+        let mut settings = get_settings(&self.app_handle);
+        if let Some(requested_language) = requested_language {
+            settings.selected_language = requested_language;
+        }
 
         // Validate selected language against the model's supported languages.
         // If the language isn't supported, fall back to "auto" to prevent errors.
@@ -1165,7 +1262,6 @@ impl TranscriptionManager {
         // run extension and the fuzzy-correction skip are gated on
         // `model_is_whisper` instead, since non-whisper archs can advertise
         // the feature while rejecting the whisper-kind extension.
-        let mut model_takes_initial_prompt = false;
         // Whether the loaded model is actually whisper-family (arch string).
         // Non-whisper archs (e.g. Voxtral Small) can advertise
         // Feature::InitialPrompt yet reject the whisper-kind run extension
@@ -1204,7 +1300,7 @@ impl TranscriptionManager {
             if let LoadedEngine::TranscribeCpp(session) = &engine {
                 let model = session.model();
                 let caps = model.capabilities();
-                model_takes_initial_prompt = model.supports(Feature::InitialPrompt);
+                let model_takes_initial_prompt = model.supports(Feature::InitialPrompt);
                 model_is_whisper = model.arch() == "whisper";
                 model_supports_translate = caps.supports_translate;
                 model_languages = caps.languages;
@@ -1218,127 +1314,132 @@ impl TranscriptionManager {
                 );
             }
 
-            let transcribe_result = catch_unwind(AssertUnwindSafe(|| -> Result<String> {
-                match &mut engine {
-                    LoadedEngine::TranscribeCpp(session) => {
-                        // Custom words become the initial prompt ONLY for models
-                        // that accept one (whisper family). Attaching the
-                        // whisper run extension to a non-whisper arch is rejected
-                        // with INVALID_ARG, so skip it there and let the fuzzy
-                        // post-correction handle custom words instead.
-                        let family = if settings.custom_words.is_empty() || !model_is_whisper {
-                            None
-                        } else {
-                            Some(RunExtension::Whisper(WhisperRunOptions {
-                                initial_prompt: Some(settings.custom_words.join(", ")),
+            let transcribe_result =
+                catch_unwind(AssertUnwindSafe(|| -> Result<(String, Option<String>)> {
+                    match &mut engine {
+                        LoadedEngine::TranscribeCpp(session) => {
+                            // Custom words become the initial prompt ONLY for models
+                            // that accept one (whisper family). Attaching the
+                            // whisper run extension to a non-whisper arch is rejected
+                            // with INVALID_ARG, so skip it there and let the fuzzy
+                            // post-correction handle custom words instead.
+                            let family = if settings.custom_words.is_empty() || !model_is_whisper {
+                                None
+                            } else {
+                                Some(RunExtension::Whisper(WhisperRunOptions {
+                                    initial_prompt: Some(settings.custom_words.join(", ")),
+                                    ..Default::default()
+                                }))
+                            };
+
+                            let run_plan = transcribe_cpp_run_plan(
+                                settings.translate_to_english,
+                                &validated_language,
+                                &model_languages,
+                                model_supports_translate,
+                            );
+
+                            let run_options = RunOptions {
+                                task: run_plan.task,
+                                language: run_plan.language,
+                                target_language: run_plan.target_language,
+                                family,
                                 ..Default::default()
-                            }))
-                        };
+                            };
 
-                        let run_plan = transcribe_cpp_run_plan(
-                            settings.translate_to_english,
-                            &validated_language,
-                            &model_languages,
-                            model_supports_translate,
-                        );
+                            debug!(
+                                "transcribe-cpp run: task={:?}, language={:?}, initial_prompt={}",
+                                run_options.task,
+                                run_options.language,
+                                run_options.family.is_some()
+                            );
 
-                        let run_options = RunOptions {
-                            task: run_plan.task,
-                            language: run_plan.language,
-                            target_language: run_plan.target_language,
-                            family,
-                            ..Default::default()
-                        };
-
-                        debug!(
-                            "transcribe-cpp run: task={:?}, language={:?}, initial_prompt={}",
-                            run_options.task,
-                            run_options.language,
-                            run_options.family.is_some()
-                        );
-
-                        session
-                            .run(&audio, &run_options)
-                            .map(|t| t.text)
+                            session
+                                .run(&audio, &run_options)
+                                .map(|transcript| (transcript.text, transcript.language))
+                                .map_err(|e| {
+                                    anyhow::anyhow!("transcribe-cpp transcription failed: {}", e)
+                                })
+                        }
+                        LoadedEngine::Parakeet(parakeet_engine) => {
+                            let params = ParakeetParams {
+                                timestamp_granularity: Some(TimestampGranularity::Segment),
+                                ..Default::default()
+                            };
+                            parakeet_engine
+                                .transcribe_with(&audio, &params)
+                                .map(|result| (result.text, None))
+                                .map_err(|e| {
+                                    anyhow::anyhow!("Parakeet transcription failed: {}", e)
+                                })
+                        }
+                        LoadedEngine::Moonshine(moonshine_engine) => moonshine_engine
+                            .transcribe(&audio, &TranscribeOptions::default())
+                            .map(|result| (result.text, None))
+                            .map_err(|e| anyhow::anyhow!("Moonshine transcription failed: {}", e)),
+                        LoadedEngine::MoonshineStreaming(streaming_engine) => streaming_engine
+                            .transcribe(&audio, &TranscribeOptions::default())
+                            .map(|result| (result.text, None))
                             .map_err(|e| {
-                                anyhow::anyhow!("transcribe-cpp transcription failed: {}", e)
-                            })
+                                anyhow::anyhow!("Moonshine streaming transcription failed: {}", e)
+                            }),
+                        LoadedEngine::SenseVoice(sense_voice_engine) => {
+                            let language = match normalize_cjk_language(&validated_language) {
+                                "zh" => Some("zh".to_string()),
+                                "en" => Some("en".to_string()),
+                                "ja" => Some("ja".to_string()),
+                                "ko" => Some("ko".to_string()),
+                                "yue" => Some("yue".to_string()),
+                                _ => None,
+                            };
+                            let params = SenseVoiceParams {
+                                language,
+                                use_itn: Some(true),
+                            };
+                            sense_voice_engine
+                                .transcribe_with(&audio, &params)
+                                .map(|result| (result.text, None))
+                                .map_err(|e| {
+                                    anyhow::anyhow!("SenseVoice transcription failed: {}", e)
+                                })
+                        }
+                        LoadedEngine::GigaAM(gigaam_engine) => gigaam_engine
+                            .transcribe(&audio, &TranscribeOptions::default())
+                            .map(|result| (result.text, None))
+                            .map_err(|e| anyhow::anyhow!("GigaAM transcription failed: {}", e)),
+                        LoadedEngine::Canary(canary_engine) => {
+                            let lang = if validated_language == "auto" {
+                                None
+                            } else {
+                                Some(validated_language.clone())
+                            };
+                            let options = TranscribeOptions {
+                                language: lang,
+                                translate: settings.translate_to_english,
+                                ..Default::default()
+                            };
+                            canary_engine
+                                .transcribe(&audio, &options)
+                                .map(|result| (result.text, None))
+                                .map_err(|e| anyhow::anyhow!("Canary transcription failed: {}", e))
+                        }
+                        LoadedEngine::Cohere(cohere_engine) => {
+                            let lang = if validated_language == "auto" {
+                                None
+                            } else {
+                                Some(normalize_cjk_language(&validated_language).to_string())
+                            };
+                            let options = TranscribeOptions {
+                                language: lang,
+                                ..Default::default()
+                            };
+                            cohere_engine
+                                .transcribe(&audio, &options)
+                                .map(|result| (result.text, None))
+                                .map_err(|e| anyhow::anyhow!("Cohere transcription failed: {}", e))
+                        }
                     }
-                    LoadedEngine::Parakeet(parakeet_engine) => {
-                        let params = ParakeetParams {
-                            timestamp_granularity: Some(TimestampGranularity::Segment),
-                            ..Default::default()
-                        };
-                        parakeet_engine
-                            .transcribe_with(&audio, &params)
-                            .map(|r| r.text)
-                            .map_err(|e| anyhow::anyhow!("Parakeet transcription failed: {}", e))
-                    }
-                    LoadedEngine::Moonshine(moonshine_engine) => moonshine_engine
-                        .transcribe(&audio, &TranscribeOptions::default())
-                        .map(|r| r.text)
-                        .map_err(|e| anyhow::anyhow!("Moonshine transcription failed: {}", e)),
-                    LoadedEngine::MoonshineStreaming(streaming_engine) => streaming_engine
-                        .transcribe(&audio, &TranscribeOptions::default())
-                        .map(|r| r.text)
-                        .map_err(|e| {
-                            anyhow::anyhow!("Moonshine streaming transcription failed: {}", e)
-                        }),
-                    LoadedEngine::SenseVoice(sense_voice_engine) => {
-                        let language = match normalize_cjk_language(&validated_language) {
-                            "zh" => Some("zh".to_string()),
-                            "en" => Some("en".to_string()),
-                            "ja" => Some("ja".to_string()),
-                            "ko" => Some("ko".to_string()),
-                            "yue" => Some("yue".to_string()),
-                            _ => None,
-                        };
-                        let params = SenseVoiceParams {
-                            language,
-                            use_itn: Some(true),
-                        };
-                        sense_voice_engine
-                            .transcribe_with(&audio, &params)
-                            .map(|r| r.text)
-                            .map_err(|e| anyhow::anyhow!("SenseVoice transcription failed: {}", e))
-                    }
-                    LoadedEngine::GigaAM(gigaam_engine) => gigaam_engine
-                        .transcribe(&audio, &TranscribeOptions::default())
-                        .map(|r| r.text)
-                        .map_err(|e| anyhow::anyhow!("GigaAM transcription failed: {}", e)),
-                    LoadedEngine::Canary(canary_engine) => {
-                        let lang = if validated_language == "auto" {
-                            None
-                        } else {
-                            Some(validated_language.clone())
-                        };
-                        let options = TranscribeOptions {
-                            language: lang,
-                            translate: settings.translate_to_english,
-                            ..Default::default()
-                        };
-                        canary_engine
-                            .transcribe(&audio, &options)
-                            .map(|r| r.text)
-                            .map_err(|e| anyhow::anyhow!("Canary transcription failed: {}", e))
-                    }
-                    LoadedEngine::Cohere(cohere_engine) => {
-                        let lang = if validated_language == "auto" {
-                            None
-                        } else {
-                            Some(normalize_cjk_language(&validated_language).to_string())
-                        };
-                        let options = TranscribeOptions {
-                            language: lang,
-                            ..Default::default()
-                        };
-                        cohere_engine
-                            .transcribe(&audio, &options)
-                            .map(|r| r.text)
-                            .map_err(|e| anyhow::anyhow!("Cohere transcription failed: {}", e))
-                    }
-                }
-            }));
+                }));
 
             match transcribe_result {
                 Ok(inner_result) => {
@@ -1394,7 +1495,9 @@ impl TranscriptionManager {
         // family). We don't pass a prompt to non-whisper models (it requires the
         // whisper-kind run extension), so they still get fuzzy correction here,
         // same as the ONNX engines.
-        let filtered_result = post_process_transcription_text(result, &settings, model_is_whisper);
+        let (raw_result, detected_language) = result;
+        let filtered_result =
+            post_process_transcription_text(raw_result.clone(), &settings, model_is_whisper);
 
         let et = std::time::Instant::now();
         let translation_note = if settings.translate_to_english {
@@ -1423,7 +1526,17 @@ impl TranscriptionManager {
 
         self.maybe_unload_immediately("transcription");
 
-        Ok(final_result)
+        Ok(TranscriptionOutcome {
+            raw_text: raw_result,
+            text: final_result,
+            model_id: active_model,
+            requested_language: settings.selected_language,
+            effective_language: validated_language,
+            detected_language,
+            audio_duration_ms: (audio_secs * 1_000.0).round() as u64,
+            transcription_ms: (elapsed_secs * 1_000.0).round() as u64,
+            real_time_factor: speedup,
+        })
     }
 }
 

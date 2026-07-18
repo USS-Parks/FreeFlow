@@ -1,3 +1,4 @@
+use crate::managers::transcription::TranscriptionOutcome;
 use crate::storage::migrations::{MigrationRunner, HISTORY_MIGRATIONS};
 
 fn recording_file_name(file_name: &str) -> Result<&Path> {
@@ -46,9 +47,18 @@ pub struct HistoryEntry {
     pub saved: bool,
     pub title: String,
     pub transcription_text: String,
+    pub raw_transcript: String,
     pub post_processed_text: Option<String>,
     pub post_process_prompt: Option<String>,
     pub post_process_requested: bool,
+    pub model_id: Option<String>,
+    pub requested_language: Option<String>,
+    pub effective_language: Option<String>,
+    pub detected_language: Option<String>,
+    pub audio_duration_ms: Option<i64>,
+    pub transcription_ms: Option<i64>,
+    pub transcription_status: String,
+    pub transcription_error: Option<String>,
 }
 
 pub struct HistoryManager {
@@ -192,9 +202,18 @@ impl HistoryManager {
             saved: row.get("saved")?,
             title: row.get("title")?,
             transcription_text: row.get("transcription_text")?,
+            raw_transcript: row.get("raw_transcript")?,
             post_processed_text: row.get("post_processed_text")?,
             post_process_prompt: row.get("post_process_prompt")?,
             post_process_requested: row.get("post_process_requested")?,
+            model_id: row.get("model_id")?,
+            requested_language: row.get("requested_language")?,
+            effective_language: row.get("effective_language")?,
+            detected_language: row.get("detected_language")?,
+            audio_duration_ms: row.get("audio_duration_ms")?,
+            transcription_ms: row.get("transcription_ms")?,
+            transcription_status: row.get("transcription_status")?,
+            transcription_error: row.get("transcription_error")?,
         })
     }
 
@@ -289,9 +308,18 @@ impl HistoryManager {
             saved: false,
             title,
             transcription_text,
+            raw_transcript: String::new(),
             post_processed_text,
             post_process_prompt,
             post_process_requested,
+            model_id: None,
+            requested_language: None,
+            effective_language: None,
+            detected_language: None,
+            audio_duration_ms: None,
+            transcription_ms: None,
+            transcription_status: "pending".to_string(),
+            transcription_error: None,
         };
 
         debug!("Saved history entry with id {}", entry.id);
@@ -311,10 +339,10 @@ impl HistoryManager {
     }
 
     /// Update an existing history entry with new transcription results (used by retry).
-    pub fn update_transcription(
+    pub fn complete_transcription(
         &self,
         id: i64,
-        transcription_text: String,
+        outcome: &TranscriptionOutcome,
         post_processed_text: Option<String>,
         post_process_prompt: Option<String>,
     ) -> Result<HistoryEntry> {
@@ -322,13 +350,29 @@ impl HistoryManager {
         let updated = conn.execute(
             "UPDATE transcription_history
              SET transcription_text = ?1,
-                 post_processed_text = ?2,
-                 post_process_prompt = ?3
-             WHERE id = ?4",
+                 raw_transcript = ?2,
+                 post_processed_text = ?3,
+                 post_process_prompt = ?4,
+                 model_id = ?5,
+                 requested_language = ?6,
+                 effective_language = ?7,
+                 detected_language = ?8,
+                 audio_duration_ms = ?9,
+                 transcription_ms = ?10,
+                 transcription_status = 'completed',
+                 transcription_error = NULL
+             WHERE id = ?11",
             params![
-                transcription_text,
+                &outcome.text,
+                &outcome.raw_text,
                 post_processed_text,
                 post_process_prompt,
+                &outcome.model_id,
+                &outcome.requested_language,
+                &outcome.effective_language,
+                &outcome.detected_language,
+                i64::try_from(outcome.audio_duration_ms).unwrap_or(i64::MAX),
+                i64::try_from(outcome.transcription_ms).unwrap_or(i64::MAX),
                 id
             ],
         )?;
@@ -339,7 +383,7 @@ impl HistoryManager {
 
         let entry = conn
             .query_row(
-                "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested
+                "SELECT id, file_name, timestamp, saved, title, transcription_text, raw_transcript, post_processed_text, post_process_prompt, post_process_requested, model_id, requested_language, effective_language, detected_language, audio_duration_ms, transcription_ms, transcription_status, transcription_error
                  FROM transcription_history WHERE id = ?1",
                 params![id],
                 Self::map_history_entry,
@@ -355,6 +399,33 @@ impl HistoryManager {
             error!("Failed to emit history-updated event: {}", e);
         }
 
+        Ok(entry)
+    }
+
+    pub fn mark_transcription_failed(&self, id: i64, message: &str) -> Result<HistoryEntry> {
+        let conn = self.get_connection()?;
+        let updated = conn.execute(
+            "UPDATE transcription_history
+             SET transcription_status = 'failed', transcription_error = ?1
+             WHERE id = ?2",
+            params![message, id],
+        )?;
+        if updated == 0 {
+            return Err(anyhow!("History entry {} not found", id));
+        }
+        let entry = conn.query_row(
+            "SELECT id, file_name, timestamp, saved, title, transcription_text, raw_transcript, post_processed_text, post_process_prompt, post_process_requested, model_id, requested_language, effective_language, detected_language, audio_duration_ms, transcription_ms, transcription_status, transcription_error
+             FROM transcription_history WHERE id = ?1",
+            params![id],
+            Self::map_history_entry,
+        )?;
+        if let Err(error) = (HistoryUpdatePayload::Updated {
+            entry: entry.clone(),
+        })
+        .emit(&self.app_handle)
+        {
+            error!("Failed to emit failed-history update: {}", error);
+        }
         Ok(entry)
     }
 
@@ -490,7 +561,7 @@ impl HistoryManager {
             (Some(cursor_id), Some(lim)) => {
                 let fetch_count = (lim + 1) as i64;
                 let mut stmt = conn.prepare(
-                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested
+                    "SELECT id, file_name, timestamp, saved, title, transcription_text, raw_transcript, post_processed_text, post_process_prompt, post_process_requested, model_id, requested_language, effective_language, detected_language, audio_duration_ms, transcription_ms, transcription_status, transcription_error
                      FROM transcription_history
                      WHERE id < ?1
                      ORDER BY id DESC
@@ -504,7 +575,7 @@ impl HistoryManager {
             (None, Some(lim)) => {
                 let fetch_count = (lim + 1) as i64;
                 let mut stmt = conn.prepare(
-                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested
+                    "SELECT id, file_name, timestamp, saved, title, transcription_text, raw_transcript, post_processed_text, post_process_prompt, post_process_requested, model_id, requested_language, effective_language, detected_language, audio_duration_ms, transcription_ms, transcription_status, transcription_error
                      FROM transcription_history
                      ORDER BY id DESC
                      LIMIT ?1",
@@ -516,7 +587,7 @@ impl HistoryManager {
             }
             (_, None) => {
                 let mut stmt = conn.prepare(
-                    "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_requested
+                    "SELECT id, file_name, timestamp, saved, title, transcription_text, raw_transcript, post_processed_text, post_process_prompt, post_process_requested, model_id, requested_language, effective_language, detected_language, audio_duration_ms, transcription_ms, transcription_status, transcription_error
                      FROM transcription_history
                      ORDER BY id DESC",
                 )?;
@@ -545,9 +616,18 @@ impl HistoryManager {
                 saved,
                 title,
                 transcription_text,
+                raw_transcript,
                 post_processed_text,
                 post_process_prompt,
-                post_process_requested
+                post_process_requested,
+                model_id,
+                requested_language,
+                effective_language,
+                detected_language,
+                audio_duration_ms,
+                transcription_ms,
+                transcription_status,
+                transcription_error
              FROM transcription_history
              ORDER BY timestamp DESC
              LIMIT 1",
@@ -572,9 +652,18 @@ impl HistoryManager {
                 saved,
                 title,
                 transcription_text,
+                raw_transcript,
                 post_processed_text,
                 post_process_prompt,
-                post_process_requested
+                post_process_requested,
+                model_id,
+                requested_language,
+                effective_language,
+                detected_language,
+                audio_duration_ms,
+                transcription_ms,
+                transcription_status,
+                transcription_error
              FROM transcription_history
              WHERE transcription_text != ''
              ORDER BY timestamp DESC
@@ -626,9 +715,18 @@ impl HistoryManager {
                 saved,
                 title,
                 transcription_text,
+                raw_transcript,
                 post_processed_text,
                 post_process_prompt,
-                post_process_requested
+                post_process_requested,
+                model_id,
+                requested_language,
+                effective_language,
+                detected_language,
+                audio_duration_ms,
+                transcription_ms,
+                transcription_status,
+                transcription_error
              FROM transcription_history
              WHERE id = ?1",
         )?;
@@ -695,9 +793,18 @@ mod tests {
                 saved BOOLEAN NOT NULL DEFAULT 0,
                 title TEXT NOT NULL,
                 transcription_text TEXT NOT NULL,
+                raw_transcript TEXT NOT NULL DEFAULT '',
                 post_processed_text TEXT,
                 post_process_prompt TEXT,
-                post_process_requested BOOLEAN NOT NULL DEFAULT 0
+                post_process_requested BOOLEAN NOT NULL DEFAULT 0,
+                model_id TEXT,
+                requested_language TEXT,
+                effective_language TEXT,
+                detected_language TEXT,
+                audio_duration_ms INTEGER,
+                transcription_ms INTEGER,
+                transcription_status TEXT NOT NULL DEFAULT 'pending',
+                transcription_error TEXT
             );",
         )
         .expect("create transcription_history table");
@@ -712,15 +819,17 @@ mod tests {
                 saved,
                 title,
                 transcription_text,
+                raw_transcript,
                 post_processed_text,
                 post_process_prompt,
                 post_process_requested
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 format!("freeflow-{}.wav", timestamp),
                 timestamp,
                 false,
                 format!("Recording {}", timestamp),
+                text,
                 text,
                 post_processed,
                 Option::<String>::None,
