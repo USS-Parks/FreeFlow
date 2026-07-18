@@ -9,6 +9,7 @@ import {
   Languages,
   Loader2,
   Trash2,
+  Upload,
 } from "lucide-react";
 import type { ModelInfo } from "@/bindings";
 import { formatModelSize } from "../../lib/utils/format";
@@ -70,6 +71,7 @@ interface ModelCardProps {
   className?: string;
   onSelect: (modelId: string) => void;
   onDownload?: (modelId: string) => void;
+  onManualInstall?: (modelId: string) => void;
   onDelete?: (modelId: string) => void;
   onCancel?: (modelId: string) => void;
   downloadProgress?: number;
@@ -85,6 +87,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
   className = "",
   onSelect,
   onDownload,
+  onManualInstall,
   onDelete,
   onCancel,
   downloadProgress,
@@ -142,6 +145,12 @@ const ModelCard: React.FC<ModelCardProps> = ({
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
     onDelete?.(model.id);
+  };
+
+  const handleManualInstall = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onManualInstall?.(model.id);
   };
 
   return (
@@ -273,6 +282,20 @@ const ModelCard: React.FC<ModelCardProps> = ({
               <span className="text-text/40">{quantLabel}</span>
             )}
           </span>
+        )}
+        {onManualInstall && status === "downloadable" && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleManualInstall}
+            title={t("modelInstall.manualInstallTitle", {
+              modelName: displayName,
+            })}
+            className="flex items-center gap-1.5 text-text/60 hover:text-logo-primary hover:bg-logo-primary/10"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>{t("modelInstall.manualInstall")}</span>
+          </Button>
         )}
         {onDelete && (status === "available" || status === "active") && (
           <Button

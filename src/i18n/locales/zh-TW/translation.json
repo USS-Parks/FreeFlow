@@ -153,6 +153,15 @@
     },
     "legacy": "舊版"
   },
+  "modelInstall": {
+    "confirmTitle": "Review model installation",
+    "confirmMessage": "Model: {{modelName}}\\nExact size: {{sizeBytes}} bytes\\nArtifact: {{sourceRepository}} @ {{sourceRevision}}\\nSource URL: {{sourceUrl}}\\nBase model: {{baseRepository}} @ {{baseRevision}}\\nSHA-256: {{sha256}}\\nDestination: {{destination}}\\n\\nLicense disclosures\\n{{licenses}}\\n\\nDistribution\\n{{redistributionStatus}}\\n\\nContinue with this installation?",
+    "licenseLine": "{{scope}}\\n{{name}} ({{identifier}})\\n{{url}}\\nAttribution: {{attribution}}",
+    "manualInstall": "Install from file",
+    "manualInstallTitle": "Install {{modelName}} from a local GGUF file",
+    "fileFilter": "GGUF model",
+    "planError": "Could not load the model installation details: {{error}}"
+  },
   "settings": {
     "modelSettings": {
       "title": "{{model}} 設定"

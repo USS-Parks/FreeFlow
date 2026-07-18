@@ -39,7 +39,15 @@ interface ModelsStore {
   loadCurrentModel: () => Promise<void>;
   rescanLocalModels: () => Promise<void>;
   selectModel: (modelId: string) => Promise<boolean>;
-  downloadModel: (modelId: string) => Promise<boolean>;
+  downloadModel: (
+    modelId: string,
+    acceptedManifestDigest: string,
+  ) => Promise<boolean>;
+  installModelFromFile: (
+    modelId: string,
+    sourcePath: string,
+    acceptedManifestDigest: string,
+  ) => Promise<boolean>;
   cancelDownload: (modelId: string) => Promise<boolean>;
   deleteModel: (modelId: string) => Promise<boolean>;
   getModelInfo: (modelId: string) => ModelInfo | undefined;
@@ -159,7 +167,7 @@ export const useModelStore = create<ModelsStore>()(
       }
     },
 
-    downloadModel: async (modelId: string) => {
+    downloadModel: async (modelId: string, acceptedManifestDigest: string) => {
       try {
         set({ error: null });
         set(
@@ -173,7 +181,10 @@ export const useModelStore = create<ModelsStore>()(
             };
           }),
         );
-        const result = await commands.downloadModel(modelId);
+        const result = await commands.downloadModel(
+          modelId,
+          acceptedManifestDigest,
+        );
         if (result.status !== "ok") {
           // Fallback cleanup in case the model-download-failed event was not received
           // (e.g. listener not yet registered). The event handler is a no-op if it
@@ -195,6 +206,41 @@ export const useModelStore = create<ModelsStore>()(
             delete state.downloadingModels[modelId];
             delete state.downloadProgress[modelId];
             delete state.downloadStats[modelId];
+          }),
+        );
+        return false;
+      }
+    },
+
+    installModelFromFile: async (
+      modelId: string,
+      sourcePath: string,
+      acceptedManifestDigest: string,
+    ) => {
+      try {
+        set({ error: null });
+        set(
+          produce((state) => {
+            state.verifyingModels[modelId] = true;
+          }),
+        );
+        const result = await commands.installModelFromFile(
+          modelId,
+          sourcePath,
+          acceptedManifestDigest,
+        );
+        if (result.status !== "ok") {
+          set(
+            produce((state) => {
+              delete state.verifyingModels[modelId];
+            }),
+          );
+        }
+        return result.status === "ok";
+      } catch {
+        set(
+          produce((state) => {
+            delete state.verifyingModels[modelId];
           }),
         );
         return false;

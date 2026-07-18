@@ -901,11 +901,49 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
-  async downloadModel(modelId: string): Promise<Result<null, string>> {
+  async getModelInstallPlan(
+    modelId: string,
+  ): Promise<Result<ModelInstallPlan, string>> {
     try {
       return {
         status: "ok",
-        data: await TAURI_INVOKE("download_model", { modelId }),
+        data: await TAURI_INVOKE("get_model_install_plan", { modelId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async downloadModel(
+    modelId: string,
+    acceptedManifestDigest: string,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("download_model", {
+          modelId,
+          acceptedManifestDigest,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async installModelFromFile(
+    modelId: string,
+    sourcePath: string,
+    acceptedManifestDigest: string,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("install_model_from_file", {
+          modelId,
+          sourcePath,
+          acceptedManifestDigest,
+        }),
       };
     } catch (e) {
       if (e instanceof Error) throw e;
@@ -1444,15 +1482,46 @@ export type ModelInfo = {
   supports_streaming: boolean;
   supports_language_detection: boolean;
 };
+export type ModelInstallPlan = {
+  schema_version: number;
+  model_id: string;
+  display_name: string;
+  source_url: string;
+  artifact_repository: string;
+  artifact_revision: string;
+  base_repository: string;
+  base_revision: string;
+  filename: string;
+  format: string;
+  quantization: string;
+  size_bytes: number;
+  sha256: string;
+  destination: string;
+  licenses: ModelLicenseDisclosure[];
+  redistribution_status: string;
+  manifest_digest: string;
+};
+export type ModelLicenseDisclosure = {
+  scope: string;
+  name: string;
+  identifier: string;
+  url: string;
+  attribution: string;
+};
 export type ModelLoadStatus = {
   is_loaded: boolean;
   current_model: string | null;
 };
 /**
- * Where a model comes from and how Handy obtains it — the routing discriminant
+ * Where a model comes from and how FreeFlow obtains it — the routing discriminant
  * for downloading and on-disk resolution.
  */
 export type ModelSource =
+  /**
+   * An audited FreeFlow manifest. The backend resolves all security-critical
+   * install data from this stable identifier.
+   */
+  | { Manifest: { manifest_id: string } }
   /**
    * Direct HTTP download from an explicitly approved URL.
    */

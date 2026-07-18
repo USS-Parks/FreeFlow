@@ -1,3 +1,4 @@
+use crate::catalog::ModelInstallPlan;
 use crate::managers::model::{ModelInfo, ModelManager};
 use crate::managers::transcription::{ModelStateEvent, TranscriptionManager};
 use crate::settings::{get_settings, write_settings, ModelUnloadTimeout};
@@ -21,6 +22,17 @@ pub async fn get_model_info(
     Ok(model_manager.get_model_info(&model_id))
 }
 
+#[tauri::command]
+#[specta::specta]
+pub async fn get_model_install_plan(
+    model_manager: State<'_, Arc<ModelManager>>,
+    model_id: String,
+) -> Result<ModelInstallPlan, String> {
+    model_manager
+        .get_model_install_plan(&model_id)
+        .map_err(|error| error.to_string())
+}
+
 /// Re-scan local sources (custom models dir + shared HF cache) for models added
 /// since launch
 #[tauri::command]
@@ -41,9 +53,10 @@ pub async fn download_model(
     app_handle: AppHandle,
     model_manager: State<'_, Arc<ModelManager>>,
     model_id: String,
+    accepted_manifest_digest: String,
 ) -> Result<(), String> {
     let result = model_manager
-        .download_model(&model_id)
+        .download_model(&model_id, &accepted_manifest_digest)
         .await
         .map_err(|e| e.to_string());
 
@@ -54,6 +67,46 @@ pub async fn download_model(
         );
     }
 
+    result
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn install_model_from_file(
+    app_handle: AppHandle,
+    model_manager: State<'_, Arc<ModelManager>>,
+    model_id: String,
+    source_path: String,
+    accepted_manifest_digest: String,
+) -> Result<(), String> {
+    let _ = app_handle.emit("model-verification-started", &model_id);
+    let manager = model_manager.inner().clone();
+    let event_model_id = model_id.clone();
+    let task_result = tokio::task::spawn_blocking(move || {
+        manager.install_model_from_file(
+            &model_id,
+            std::path::Path::new(&source_path),
+            &accepted_manifest_digest,
+        )
+    })
+    .await;
+    let result = match task_result {
+        Ok(result) => result.map_err(|error| error.to_string()),
+        Err(error) => Err(format!("Manual model install task panicked: {error}")),
+    };
+
+    match &result {
+        Ok(()) => {
+            let _ = app_handle.emit("model-verification-completed", &event_model_id);
+            let _ = app_handle.emit("model-download-complete", &event_model_id);
+        }
+        Err(error) => {
+            let _ = app_handle.emit(
+                "model-download-failed",
+                serde_json::json!({ "model_id": event_model_id, "error": error }),
+            );
+        }
+    }
     result
 }
 

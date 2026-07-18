@@ -1,0 +1,86 @@
+name: macOS model live gate
+
+on:
+  push:
+    branches:
+      - codex/ff-v1-model-install
+    paths:
+      - .github/workflows/macos-model-live-gate.yml
+      - models/manifests/**
+      - src-tauri/Cargo.lock
+      - src-tauri/Cargo.toml
+      - src-tauri/build.rs
+      - src-tauri/src/catalog/**
+      - src-tauri/src/managers/model.rs
+      - src-tauri/src/managers/transcription.rs
+      - src-tauri/src/model_install.rs
+  workflow_dispatch:
+    inputs:
+      accept_nvidia_open_model_license:
+        description: "I reviewed and accept the NVIDIA Open Model License linked in the checked-in Parakeet manifest"
+        required: true
+        default: false
+        type: boolean
+      accept_conversion_cc_by_4_0:
+        description: "I reviewed and accept the GGUF conversion repository's CC-BY-4.0 declaration"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-model-live-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  consent:
+    name: Verify explicit model-license consent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require manual-dispatch acknowledgements
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          ACCEPT_NVIDIA_OML: ${{ inputs.accept_nvidia_open_model_license }}
+          ACCEPT_CONVERSION_CC_BY: ${{ inputs.accept_conversion_cc_by_4_0 }}
+        run: |
+          test "$ACCEPT_NVIDIA_OML" = "true"
+          test "$ACCEPT_CONVERSION_CC_BY" = "true"
+      - name: Require feature-branch acknowledgements
+        if: github.event_name == 'push'
+        env:
+          ACCEPT_NVIDIA_OML: ${{ vars.FREEFLOW_ACCEPT_NVIDIA_OPEN_MODEL_LICENSE }}
+          ACCEPT_CONVERSION_CC_BY: ${{ vars.FREEFLOW_ACCEPT_CONVERSION_CC_BY_4_0 }}
+        run: |
+          test "$ACCEPT_NVIDIA_OML" = "true"
+          test "$ACCEPT_CONVERSION_CC_BY" = "true"
+
+  install-and-load:
+    name: Install and load (${{ matrix.arch }})
+    needs: consent
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Confirm runner architecture
+        env:
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: test "$(uname -m)" = "$EXPECTED_ARCH"
+      - name: Download, verify, install, and load pinned Parakeet model
+        env:
+          FREEFLOW_MODEL_LICENSE_ACCEPTANCE: I_ACCEPT_NVIDIA_OML_AND_CC_BY_4_0
+          CMAKE_ARGS: -DGGML_NATIVE=OFF
+        run: >-
+          cargo test --manifest-path src-tauri/Cargo.toml
+          live_parakeet_direct_download_creates_a_loadable_session --
+          --ignored --nocapture --test-threads=1

@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { open } from "@tauri-apps/plugin-dialog";
 import { ChevronDown } from "lucide-react";
 import type { ModelInfo } from "@/bindings";
 import type { ModelCardStatus } from "./ModelCard";
 import ModelCard, { isLegacySource } from "./ModelCard";
 import FreeFlowWordmark from "../icons/FreeFlowWordmark";
 import { useModelStore } from "../../stores/modelStore";
+import { requestModelInstallConfirmation } from "@/lib/models/modelInstall";
 
 interface OnboardingProps {
   onModelSelected: () => void;
@@ -17,6 +19,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
   const {
     models,
     downloadModel,
+    installModelFromFile,
     selectModel,
     downloadingModels,
     verifyingModels,
@@ -102,13 +105,41 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
   ]);
 
   const handleDownloadModel = async (modelId: string) => {
-    setSelectedModelId(modelId);
+    try {
+      const plan = await requestModelInstallConfirmation(modelId, t);
+      if (!plan) return;
+      setSelectedModelId(modelId);
 
-    // Error toast is handled centrally by the model-download-failed event listener
-    // in modelStore — no toast here to avoid duplicates.
-    const success = await downloadModel(modelId);
-    if (!success) {
+      // Error toast is handled centrally by the model-download-failed event listener
+      // in modelStore — no toast here to avoid duplicates.
+      const success = await downloadModel(modelId, plan.manifest_digest);
+      if (!success) setSelectedModelId(null);
+    } catch (error) {
       setSelectedModelId(null);
+      toast.error(t("modelInstall.planError", { error: String(error) }));
+    }
+  };
+
+  const handleManualInstall = async (modelId: string) => {
+    try {
+      const plan = await requestModelInstallConfirmation(modelId, t);
+      if (!plan) return;
+      const sourcePath = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: t("modelInstall.fileFilter"), extensions: ["gguf"] }],
+      });
+      if (typeof sourcePath !== "string") return;
+      setSelectedModelId(modelId);
+      const success = await installModelFromFile(
+        modelId,
+        sourcePath,
+        plan.manifest_digest,
+      );
+      if (!success) setSelectedModelId(null);
+    } catch (error) {
+      setSelectedModelId(null);
+      toast.error(t("modelInstall.planError", { error: String(error) }));
     }
   };
 
@@ -193,6 +224,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                   disabled={isBusy}
                   onSelect={handleDownloadModel}
                   onDownload={handleDownloadModel}
+                  onManualInstall={handleManualInstall}
                   onCancel={handleCancelDownload}
                   downloadProgress={getModelDownloadProgress(model.id)}
                   downloadSpeed={getModelDownloadSpeed(model.id)}
@@ -208,6 +240,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                   disabled={isBusy}
                   onSelect={handleDownloadModel}
                   onDownload={handleDownloadModel}
+                  onManualInstall={handleManualInstall}
                   onCancel={handleCancelDownload}
                   downloadProgress={getModelDownloadProgress(model.id)}
                   downloadSpeed={getModelDownloadSpeed(model.id)}
@@ -243,6 +276,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                     disabled={isBusy}
                     onSelect={handleDownloadModel}
                     onDownload={handleDownloadModel}
+                    onManualInstall={handleManualInstall}
                     onCancel={handleCancelDownload}
                     downloadProgress={getModelDownloadProgress(model.id)}
                     downloadSpeed={getModelDownloadSpeed(model.id)}

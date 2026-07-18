@@ -1,25 +1,21 @@
 use super::model_capabilities::{
     CapabilityProbe, CapabilityProber, Compatibility, GgufHeaderProber,
 };
+use crate::catalog::{manifest_for, ModelInstallPlan};
+use crate::model_install;
 use crate::settings::{get_settings, write_settings};
 use anyhow::Result;
-use flate2::read::GzDecoder;
-use futures_util::StreamExt;
-use hf_hub::api::tokio::{ApiBuilder, CancellationToken, Progress};
+use hf_hub::api::tokio::CancellationToken;
 use hf_hub::{Cache, Repo, RepoType};
 use log::{debug, info, warn};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use specta::Type;
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::fs::File;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
-use tar::Archive;
 use tauri::{AppHandle, Emitter, Manager};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
@@ -37,10 +33,14 @@ pub enum EngineType {
     Cohere,
 }
 
-/// Where a model comes from and how Handy obtains it — the routing discriminant
+/// Where a model comes from and how FreeFlow obtains it — the routing discriminant
 /// for downloading and on-disk resolution.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub enum ModelSource {
+    /// An audited FreeFlow manifest. The caller supplies only this stable id;
+    /// the backend resolves the reviewed URL, revision, size, hash, licenses,
+    /// and destination from `crate::catalog`.
+    Manifest { manifest_id: String },
     /// Direct HTTP download from an explicitly approved URL.
     Url {
         url: String,
@@ -205,7 +205,7 @@ impl ModelDescriptor {
             is_recommended: self.recommended,
             supports_language_selection: languages.len() > 1,
             supported_languages: languages,
-            // Catalog models are always HF-sourced downloads, never user-dropped
+            // Catalog models are audited manifest downloads, never user-dropped
             // custom files (those bypass the descriptor and set this directly).
             is_custom: false,
             supports_streaming: self.caps.supports_streaming.unwrap_or(false),
@@ -319,90 +319,6 @@ fn local_caps(probe: &CapabilityProbe) -> LocalCaps {
         supports_language_selection: languages.len() > 1,
         supports_language_detection: probe.supports_language_detect.unwrap_or(false),
         supported_languages: languages,
-    }
-}
-
-/// Bridges hf-hub's async download progress to Handy's `model-download-progress`
-/// event. hf-hub clones the reporter, so shared state lives behind an `Arc`.
-#[derive(Clone)]
-struct HfDownloadProgress {
-    app_handle: AppHandle,
-    model_id: String,
-    state: Arc<Mutex<HfProgressState>>,
-}
-
-struct HfProgressState {
-    total: u64,
-    downloaded: u64,
-    last_emit: Instant,
-}
-
-impl HfDownloadProgress {
-    fn new(app_handle: AppHandle, model_id: String) -> Self {
-        Self {
-            app_handle,
-            model_id,
-            state: Arc::new(Mutex::new(HfProgressState {
-                total: 0,
-                downloaded: 0,
-                last_emit: Instant::now(),
-            })),
-        }
-    }
-
-    fn emit(&self, downloaded: u64, total: u64) {
-        let percentage = if total > 0 {
-            (downloaded as f64 / total as f64) * 100.0
-        } else {
-            0.0
-        };
-        let _ = self.app_handle.emit(
-            "model-download-progress",
-            &DownloadProgress {
-                model_id: self.model_id.clone(),
-                downloaded,
-                total,
-                percentage,
-            },
-        );
-    }
-}
-
-impl Progress for HfDownloadProgress {
-    async fn init(&mut self, size: usize, _filename: &str) {
-        {
-            let mut st = self.state.lock().unwrap();
-            st.total = size as u64;
-            st.downloaded = 0;
-            st.last_emit = Instant::now();
-        }
-        self.emit(0, size as u64);
-    }
-
-    async fn update(&mut self, size: usize) {
-        let (downloaded, total, emit) = {
-            let mut st = self.state.lock().unwrap();
-            st.downloaded = st.downloaded.saturating_add(size as u64);
-            let now = Instant::now();
-            // Throttle to ~10 updates/sec, but always emit the final byte.
-            let emit = now.duration_since(st.last_emit) >= Duration::from_millis(100)
-                || (st.total > 0 && st.downloaded >= st.total);
-            if emit {
-                st.last_emit = now;
-            }
-            (st.downloaded, st.total, emit)
-        };
-        if emit {
-            self.emit(downloaded, total);
-        }
-    }
-
-    async fn finish(&mut self) {
-        let total = {
-            let st = self.state.lock().unwrap();
-            st.total.max(st.downloaded)
-        };
-        self.emit(total, total);
     }
 }
 
@@ -1191,6 +1107,25 @@ impl ModelManager {
         models.get(model_id).cloned()
     }
 
+    pub fn get_model_install_plan(&self, model_id: &str) -> Result<ModelInstallPlan> {
+        let manifest = manifest_for(model_id)
+            .ok_or_else(|| anyhow::anyhow!("Model has no approved install manifest: {model_id}"))?;
+        Ok(ModelInstallPlan::from_manifest(manifest, &self.models_dir))
+    }
+
+    pub fn install_model_from_file(
+        &self,
+        model_id: &str,
+        source_path: &Path,
+        accepted_manifest_digest: &str,
+    ) -> Result<()> {
+        let manifest = crate::catalog::accepted_manifest(model_id, accepted_manifest_digest)
+            .map_err(anyhow::Error::msg)?;
+        model_install::install_from_local_file(source_path, &self.models_dir, manifest)?;
+        self.update_download_status()?;
+        Ok(())
+    }
+
     /// Reconcile a model's advertised capabilities with the ground truth from the
     /// loaded model (transcribe-cpp's GGUF-derived capabilities), overwriting the
     /// pre-download view (catalog metadata or a header probe — see
@@ -1303,6 +1238,23 @@ impl ModelManager {
         let mut models = self.available_models.lock().unwrap();
 
         for model in models.values_mut() {
+            if let ModelSource::Manifest { manifest_id } = &model.source {
+                if let Some(manifest) = manifest_for(manifest_id) {
+                    model.is_downloaded =
+                        model_install::has_verified_receipt(&self.models_dir, manifest);
+                    model.is_downloading = false;
+                    let partial = model_install::partial_path(&self.models_dir, manifest);
+                    model.partial_size = partial
+                        .metadata()
+                        .map(|metadata| metadata.len())
+                        .unwrap_or(0);
+                } else {
+                    model.is_downloaded = false;
+                    model.is_downloading = false;
+                    model.partial_size = 0;
+                }
+                continue;
+            }
             if let ModelSource::HuggingFace { repo_id, revision } = &model.source {
                 model.is_downloaded = hf_cached_path(repo_id, revision, &model.filename).is_some();
                 model.is_downloading = false;
@@ -1683,149 +1635,13 @@ impl ModelManager {
         })
     }
 
-    /// Verifies the SHA256 of `path` against `expected_sha256` (if provided).
-    /// On mismatch or read error the partial file is deleted and an error is returned,
-    /// so the next download attempt always starts from a clean state.
-    /// When `expected_sha256` is `None` (custom user models) verification is skipped.
-    fn verify_sha256(path: &Path, expected_sha256: Option<&str>, model_id: &str) -> Result<()> {
-        let Some(expected) = expected_sha256 else {
-            return Ok(());
-        };
-        match Self::compute_sha256(path) {
-            Ok(actual) if actual == expected => {
-                info!("SHA256 verified for model {}", model_id);
-                Ok(())
-            }
-            Ok(actual) => {
-                warn!(
-                    "SHA256 mismatch for model {}: expected {}, got {}",
-                    model_id, expected, actual
-                );
-                let _ = fs::remove_file(path);
-                Err(anyhow::anyhow!(
-                    "Download verification failed for model {}: file is corrupt. Please retry.",
-                    model_id
-                ))
-            }
-            Err(e) => {
-                let _ = fs::remove_file(path);
-                Err(anyhow::anyhow!(
-                    "Failed to verify download for model {}: {}. Please retry.",
-                    model_id,
-                    e
-                ))
-            }
-        }
-    }
-
-    /// Computes the SHA256 hex digest of a file, reading in 64KB chunks to handle large models.
-    fn compute_sha256(path: &Path) -> Result<String> {
-        let mut file = File::open(path)?;
-        let mut hasher = Sha256::new();
-        let mut buffer = [0u8; 65536];
-        loop {
-            let n = file.read(&mut buffer)?;
-            if n == 0 {
-                break;
-            }
-            hasher.update(&buffer[..n]);
-        }
-        Ok(format!("{:x}", hasher.finalize()))
-    }
-
-    /// Download a Hugging Face-sourced model into the shared HF cache via
-    /// hf-hub, reporting progress through the same `model-download-progress`
-    /// event the URL path uses. Relies on hf-hub's stock token + cache (no
-    /// custom environment wiring).
-    async fn download_hf_model(
+    pub async fn download_model(
         &self,
-        model_info: &ModelInfo,
-        repo_id: String,
-        revision: String,
+        model_id: &str,
+        accepted_manifest_digest: &str,
     ) -> Result<()> {
-        let model_id = model_info.id.clone();
-        let filename = model_info.filename.clone();
-
-        // Already in the shared cache (possibly from another tool)? Done.
-        if hf_cached_path(&repo_id, &revision, &filename).is_some() {
-            self.update_download_status()?;
-            let _ = self.app_handle.emit("model-download-complete", &model_id);
-            return Ok(());
-        }
-
-        // Mark downloading; the guard resets the flag on any error path.
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(&model_id) {
-                model.is_downloading = true;
-            }
-        }
-
-        // Register a cancellation token so `cancel_download` can abort this
-        // transfer promptly. The guard removes it on every exit path.
-        let cancel_token = CancellationToken::new();
-        {
-            let mut flags = self.cancel_flags.lock().unwrap();
-            flags.insert(model_id.clone(), cancel_token.clone());
-        }
-
-        let mut cleanup = DownloadCleanup {
-            available_models: &self.available_models,
-            cancel_flags: &self.cancel_flags,
-            model_id: model_id.clone(),
-            disarmed: false,
-        };
-
-        info!(
-            "Downloading HF model {} from {}@{} ({})",
-            model_id, repo_id, revision, filename
-        );
-
-        // Download chunks in parallel (default is 1 = sequential). Throughput
-        // scales near-linearly with this count because each connection is capped
-        // (~8 MB/s observed per stream), so we stack several to approach the
-        // link's real bandwidth. 8 stays light on CPU/RAM (~80 MB peak buffers)
-        // even on older machines and is browser-like in connection count.
-        let api = ApiBuilder::from_env()
-            .with_progress(false)
-            .with_max_files(8)
-            .build()
-            .map_err(|e| anyhow::anyhow!("Failed to init Hugging Face API: {}", e))?;
-        let repo = api.repo(Repo::with_revision(repo_id, RepoType::Model, revision));
-        let progress = HfDownloadProgress::new(self.app_handle.clone(), model_id.clone());
-        match repo
-            .download_with_progress_cancellable(&filename, progress, cancel_token)
-            .await
-        {
-            Ok(_) => {}
-            Err(hf_hub::api::tokio::ApiError::Cancelled) => {
-                // User cancelled. hf-hub leaves the partially downloaded
-                // `.sync.part` in the shared cache, so a later attempt resumes
-                // instead of restarting. The guard resets is_downloading and
-                // drops the token; `cancel_download` already emitted
-                // `model-download-cancelled`.
-                info!("HF download cancelled for: {}", model_id);
-                return Ok(());
-            }
-            Err(e) => {
-                return Err(anyhow::anyhow!("Hugging Face download failed: {}", e));
-            }
-        }
-
-        cleanup.disarmed = true;
-        self.update_download_status()?;
-        self.cancel_flags.lock().unwrap().remove(&model_id);
-        let _ = self.app_handle.emit("model-download-complete", &model_id);
-        info!("HF model {} downloaded", model_id);
-        Ok(())
-    }
-
-    pub async fn download_model(&self, model_id: &str) -> Result<()> {
-        return Err(anyhow::anyhow!(
-            "Network model installation is disabled until FF-V1 provenance gates are implemented; install an approved local model manually"
-        ));
-
-        #[allow(unreachable_code)]
+        let manifest = crate::catalog::accepted_manifest(model_id, accepted_manifest_digest)
+            .map_err(anyhow::Error::msg)?;
         let model_info = {
             let models = self.available_models.lock().unwrap();
             models.get(model_id).cloned()
@@ -1834,34 +1650,38 @@ impl ModelManager {
         let model_info =
             model_info.ok_or_else(|| anyhow::anyhow!("Model not found: {}", model_id))?;
 
-        let (url, expected_sha256) = match &model_info.source {
-            ModelSource::Url { url, sha256 } => (url.clone(), sha256.clone()),
-            ModelSource::HuggingFace { repo_id, revision } => {
-                return self
-                    .download_hf_model(&model_info, repo_id.clone(), revision.clone())
-                    .await;
+        match &model_info.source {
+            ModelSource::Manifest { manifest_id } if manifest_id == model_id => {}
+            _ => {
+                return Err(anyhow::anyhow!(
+                    "Network installation is permitted only for audited manifest models"
+                ));
             }
-            ModelSource::Local => {
-                return Err(anyhow::anyhow!("No download source for model"));
-            }
-        };
-        let model_path = self.models_dir.join(&model_info.filename);
-        let partial_path = self
-            .models_dir
-            .join(format!("{}.partial", &model_info.filename));
+        }
+        let url = manifest.source_url.clone();
+        let model_path = manifest.destination(&self.models_dir);
+        let partial_path = model_install::partial_path(&self.models_dir, manifest);
 
-        // Don't download if complete version already exists
+        // Adopt a complete matching file after verification (for example a file
+        // copied into place by a previous interrupted receipt write). Mere path
+        // existence is never treated as an installed model.
         if model_path.exists() {
-            // Clean up any partial file that might exist
-            if partial_path.exists() {
-                let _ = fs::remove_file(&partial_path);
+            if !model_install::has_verified_receipt(&self.models_dir, manifest) {
+                if let Err(error) = model_install::verify_artifact(&model_path, manifest) {
+                    let _ = fs::remove_file(&model_path);
+                    let _ = model_install::remove_receipt(&self.models_dir, manifest);
+                    return Err(error);
+                }
+                model_install::write_receipt(&self.models_dir, manifest, "download")?;
             }
+            let _ = fs::remove_file(&partial_path);
             self.update_download_status()?;
+            let _ = self.app_handle.emit("model-download-complete", model_id);
             return Ok(());
         }
 
         // Check if we have a partial download to resume
-        let mut resume_from = if partial_path.exists() {
+        let resume_from = if partial_path.is_file() {
             let size = partial_path.metadata()?.len();
             info!("Resuming download of model {} from byte {}", model_id, size);
             size
@@ -1869,6 +1689,35 @@ impl ModelManager {
             info!("Starting fresh download of model {} from {}", model_id, url);
             0
         };
+        if resume_from > manifest.size_bytes {
+            let _ = fs::remove_file(&partial_path);
+            return Err(anyhow::anyhow!(
+                "Partial model file exceeds the approved {} byte artifact and was removed",
+                manifest.size_bytes
+            ));
+        }
+        model_install::check_disk_space(&self.models_dir, manifest, resume_from)?;
+
+        if resume_from == manifest.size_bytes {
+            let _ = self.app_handle.emit("model-verification-started", model_id);
+            let verify_manifest = manifest.clone();
+            let verify_models_dir = self.models_dir.clone();
+            tokio::task::spawn_blocking(move || {
+                model_install::finalize_verified_partial(
+                    &verify_models_dir,
+                    &verify_manifest,
+                    "download",
+                )
+            })
+            .await
+            .map_err(|error| anyhow::anyhow!("Model verification task panicked: {error}"))??;
+            self.update_download_status()?;
+            let _ = self
+                .app_handle
+                .emit("model-verification-completed", model_id);
+            let _ = self.app_handle.emit("model-download-complete", model_id);
+            return Ok(());
+        }
 
         // Mark as downloading
         {
@@ -1894,260 +1743,78 @@ impl ModelManager {
             disarmed: false,
         };
 
-        // Create HTTP client with range request for resuming
-        let client = reqwest::Client::new();
-        let mut request = client.get(&url);
-
-        if resume_from > 0 {
-            request = request.header("Range", format!("bytes={}-", resume_from));
-        }
-
-        let mut response = request.send().await?;
-
-        // If we tried to resume but server returned 200 (not 206 Partial Content),
-        // the server doesn't support range requests. Delete partial file and restart
-        // fresh to avoid file corruption (appending full file to partial).
-        if resume_from > 0 && response.status() == reqwest::StatusCode::OK {
-            warn!(
-                "Server doesn't support range requests for model {}, restarting download",
-                model_id
-            );
-            drop(response);
-            let _ = fs::remove_file(&partial_path);
-
-            // Reset resume_from since we're starting fresh
-            resume_from = 0;
-
-            // Restart download without range header
-            response = client.get(&url).send().await?;
-        }
-
-        // Check for success or partial content status
-        if !response.status().is_success()
-            && response.status() != reqwest::StatusCode::PARTIAL_CONTENT
-        {
-            return Err(anyhow::anyhow!(
-                "Failed to download model: HTTP {}",
-                response.status()
-            ));
-        }
-
-        let total_size = if resume_from > 0 {
-            // For resumed downloads, add the resume point to content length
-            resume_from + response.content_length().unwrap_or(0)
-        } else {
-            response.content_length().unwrap_or(0)
-        };
-
-        let mut downloaded = resume_from;
-        let mut stream = response.bytes_stream();
-
-        // Open file for appending if resuming, or create new if starting fresh
-        let mut file = if resume_from > 0 {
-            std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&partial_path)?
-        } else {
-            std::fs::File::create(&partial_path)?
-        };
-
-        // Emit initial progress
-        let initial_progress = DownloadProgress {
-            model_id: model_id.to_string(),
-            downloaded,
-            total: total_size,
-            percentage: if total_size > 0 {
-                (downloaded as f64 / total_size as f64) * 100.0
-            } else {
-                0.0
-            },
-        };
-        let _ = self
-            .app_handle
-            .emit("model-download-progress", &initial_progress);
-
-        // Throttle progress events to max 10/sec (100ms intervals)
-        let mut last_emit = Instant::now();
-        let throttle_duration = Duration::from_millis(100);
-
-        // Download with progress
-        while let Some(chunk) = stream.next().await {
-            // Check if download was cancelled
-            if cancel_token.is_cancelled() {
-                drop(file);
-                info!("Download cancelled for: {}", model_id);
-                // Keep partial file for resume functionality.
-                // Guard handles is_downloading + cancel_flags cleanup on drop.
-                return Ok(());
-            }
-
-            let chunk = chunk?;
-
-            file.write_all(&chunk)?;
-            downloaded += chunk.len() as u64;
-
-            let percentage = if total_size > 0 {
-                (downloaded as f64 / total_size as f64) * 100.0
-            } else {
-                0.0
-            };
-
-            // Emit progress event (throttled to avoid UI freeze)
-            if last_emit.elapsed() >= throttle_duration {
-                let progress = DownloadProgress {
-                    model_id: model_id.to_string(),
-                    downloaded,
-                    total: total_size,
-                    percentage,
-                };
-                let _ = self.app_handle.emit("model-download-progress", &progress);
-                last_emit = Instant::now();
+        let client = model_install::approved_model_http_client()?;
+        let progress_app = self.app_handle.clone();
+        let progress_model_id = model_id.to_string();
+        let mut last_emit = Instant::now() - Duration::from_millis(100);
+        loop {
+            let current_partial_size = partial_path
+                .metadata()
+                .map(|metadata| metadata.len())
+                .unwrap_or(0);
+            model_install::check_disk_space(&self.models_dir, manifest, current_partial_size)?;
+            let outcome = model_install::transfer_to_partial(
+                &client,
+                &url,
+                &partial_path,
+                manifest.size_bytes,
+                &cancel_token,
+                |downloaded, total| {
+                    if last_emit.elapsed() >= Duration::from_millis(100) || downloaded == total {
+                        let percentage = if total == 0 {
+                            100.0
+                        } else {
+                            (downloaded as f64 / total as f64) * 100.0
+                        };
+                        let _ = progress_app.emit(
+                            "model-download-progress",
+                            DownloadProgress {
+                                model_id: progress_model_id.clone(),
+                                downloaded,
+                                total,
+                                percentage,
+                            },
+                        );
+                        last_emit = Instant::now();
+                    }
+                },
+            )
+            .await?;
+            match outcome {
+                model_install::TransferOutcome::Complete => break,
+                model_install::TransferOutcome::Cancelled => {
+                    info!("Download cancelled for: {}", model_id);
+                    return Ok(());
+                }
+                model_install::TransferOutcome::RestartRequired => {
+                    warn!(
+                        "Server ignored the Range request for model {}; restarting safely",
+                        model_id
+                    );
+                }
             }
         }
 
-        // Emit final progress to ensure 100% is shown
-        let final_progress = DownloadProgress {
-            model_id: model_id.to_string(),
-            downloaded,
-            total: total_size,
-            percentage: if total_size > 0 {
-                (downloaded as f64 / total_size as f64) * 100.0
-            } else {
-                100.0
-            },
-        };
-        let _ = self
-            .app_handle
-            .emit("model-download-progress", &final_progress);
-
-        file.flush()?;
-        drop(file); // Ensure file is closed before moving
-
-        // Verify downloaded file size matches expected size
-        if total_size > 0 {
-            let actual_size = partial_path.metadata()?.len();
-            if actual_size != total_size {
-                // Download is incomplete/corrupted - delete partial and return error
-                let _ = fs::remove_file(&partial_path);
-                return Err(anyhow::anyhow!(
-                    "Download incomplete: expected {} bytes, got {} bytes",
-                    total_size,
-                    actual_size
-                ));
-            }
-        }
-
-        // Verify SHA256 checksum. Runs in a blocking thread so the async executor is not
-        // stalled while hashing large model files (up to 1.6 GB). On failure the partial
-        // is deleted inside verify_sha256 so the next attempt always starts fresh.
+        // Verify both exact byte size and SHA-256 off the async executor. A bad
+        // artifact is deleted so it can never be resumed or adopted.
         let _ = self.app_handle.emit("model-verification-started", model_id);
         info!("Verifying SHA256 for model {}...", model_id);
         let verify_path = partial_path.clone();
-        let verify_expected = expected_sha256.clone();
-        let verify_model_id = model_id.to_string();
+        let verify_manifest = manifest.clone();
         let verify_result = tokio::task::spawn_blocking(move || {
-            Self::verify_sha256(&verify_path, verify_expected.as_deref(), &verify_model_id)
+            model_install::verify_artifact(&verify_path, &verify_manifest)
         })
         .await
         .map_err(|e| anyhow::anyhow!("SHA256 task panicked: {}", e))?;
-        verify_result?;
+        if let Err(error) = verify_result {
+            let _ = fs::remove_file(&partial_path);
+            return Err(error);
+        }
         let _ = self
             .app_handle
             .emit("model-verification-completed", model_id);
 
-        // Handle directory-based models (extract tar.gz) vs file-based models
-        if model_info.is_directory {
-            // Track that this model is being extracted
-            {
-                let mut extracting = self.extracting_models.lock().unwrap();
-                extracting.insert(model_id.to_string());
-            }
-
-            // Emit extraction started event
-            let _ = self.app_handle.emit("model-extraction-started", model_id);
-            info!("Extracting archive for directory-based model: {}", model_id);
-
-            // Use a temporary extraction directory to ensure atomic operations
-            let temp_extract_dir = self
-                .models_dir
-                .join(format!("{}.extracting", &model_info.filename));
-            let final_model_dir = self.models_dir.join(&model_info.filename);
-
-            // Clean up any previous incomplete extraction
-            if temp_extract_dir.exists() {
-                let _ = fs::remove_dir_all(&temp_extract_dir);
-            }
-
-            // Create temporary extraction directory
-            fs::create_dir_all(&temp_extract_dir)?;
-
-            // Open the downloaded tar.gz file
-            let tar_gz = File::open(&partial_path)?;
-            let tar = GzDecoder::new(tar_gz);
-            let mut archive = Archive::new(tar);
-
-            // Extract to the temporary directory first
-            archive.unpack(&temp_extract_dir).map_err(|e| {
-                let error_msg = format!("Failed to extract archive: {}", e);
-                // Clean up failed extraction
-                let _ = fs::remove_dir_all(&temp_extract_dir);
-                // Delete the corrupt partial file so the next download attempt starts fresh
-                // instead of resuming from a broken archive (issue #858).
-                let _ = fs::remove_file(&partial_path);
-                // Remove from extracting set
-                {
-                    let mut extracting = self.extracting_models.lock().unwrap();
-                    extracting.remove(model_id);
-                }
-                let _ = self.app_handle.emit(
-                    "model-extraction-failed",
-                    &serde_json::json!({
-                        "model_id": model_id,
-                        "error": error_msg
-                    }),
-                );
-                anyhow::anyhow!(error_msg)
-            })?;
-
-            // Find the actual extracted directory (archive might have a nested structure)
-            let extracted_dirs: Vec<_> = fs::read_dir(&temp_extract_dir)?
-                .filter_map(|entry| entry.ok())
-                .filter(|entry| entry.file_type().map(|ft| ft.is_dir()).unwrap_or(false))
-                .collect();
-
-            if extracted_dirs.len() == 1 {
-                // Single directory extracted, move it to the final location
-                let source_dir = extracted_dirs[0].path();
-                if final_model_dir.exists() {
-                    fs::remove_dir_all(&final_model_dir)?;
-                }
-                fs::rename(&source_dir, &final_model_dir)?;
-                // Clean up temp directory
-                let _ = fs::remove_dir_all(&temp_extract_dir);
-            } else {
-                // Multiple items or no directories, rename the temp directory itself
-                if final_model_dir.exists() {
-                    fs::remove_dir_all(&final_model_dir)?;
-                }
-                fs::rename(&temp_extract_dir, &final_model_dir)?;
-            }
-
-            info!("Successfully extracted archive for model: {}", model_id);
-            // Remove from extracting set
-            {
-                let mut extracting = self.extracting_models.lock().unwrap();
-                extracting.remove(model_id);
-            }
-            // Emit extraction completed event
-            let _ = self.app_handle.emit("model-extraction-completed", model_id);
-
-            // Remove the downloaded tar.gz file
-            let _ = fs::remove_file(&partial_path);
-        } else {
-            // Move partial file to final location for file-based models
-            fs::rename(&partial_path, &model_path)?;
-        }
+        model_install::commit_verified_partial(&self.models_dir, manifest, "download")?;
 
         // Disarm the guard — success path does its own cleanup because it
         // additionally sets is_downloaded = true.
@@ -2220,6 +1887,16 @@ impl ModelManager {
         debug!("ModelManager: Partial path: {:?}", partial_path);
 
         let mut deleted_something = false;
+
+        if let ModelSource::Manifest { manifest_id } = &model_info.source {
+            if let Some(manifest) = manifest_for(manifest_id) {
+                let receipt = model_install::receipt_path(&self.models_dir, manifest);
+                if receipt.exists() {
+                    model_install::remove_receipt(&self.models_dir, manifest)?;
+                    deleted_something = true;
+                }
+            }
+        }
 
         if model_info.is_directory {
             // Delete complete model directory if it exists
@@ -2358,6 +2035,7 @@ impl ModelManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
     use std::io::Write;
     use tempfile::TempDir;
 
@@ -2557,75 +2235,6 @@ mod tests {
         let result = ModelManager::discover_custom_transcribe_models(&models_dir, &mut models);
         assert!(result.is_ok());
         assert_eq!(models.len(), count_before);
-    }
-
-    // ── SHA256 verification tests ─────────────────────────────────────────────
-
-    /// Helper: write `data` to a temp file and return (TempDir, path).
-    /// TempDir must be kept alive for the duration of the test.
-    fn write_temp_file(data: &[u8]) -> (TempDir, std::path::PathBuf) {
-        let dir = TempDir::new().unwrap();
-        let path = dir.path().join("model.partial");
-        let mut f = File::create(&path).unwrap();
-        f.write_all(data).unwrap();
-        (dir, path)
-    }
-
-    #[test]
-    fn test_verify_sha256_skipped_when_none() {
-        // Custom models have no expected hash — verification must be a no-op.
-        let (_dir, path) = write_temp_file(b"anything");
-        assert!(ModelManager::verify_sha256(&path, None, "custom").is_ok());
-        assert!(
-            path.exists(),
-            "file must be untouched when verification is skipped"
-        );
-    }
-
-    #[test]
-    fn test_verify_sha256_passes_on_correct_hash() {
-        // Compute the real hash so the test is self-consistent.
-        let (_dir, path) = write_temp_file(b"hello world");
-        let actual = ModelManager::compute_sha256(&path).unwrap();
-        assert!(
-            ModelManager::verify_sha256(&path, Some(&actual), "test_model").is_ok(),
-            "should pass when hash matches"
-        );
-        assert!(
-            path.exists(),
-            "file must be kept on successful verification"
-        );
-    }
-
-    #[test]
-    fn test_verify_sha256_fails_and_deletes_partial_on_mismatch() {
-        let (_dir, path) = write_temp_file(b"this is not the real model");
-        let wrong_hash = "0000000000000000000000000000000000000000000000000000000000000000";
-
-        let result = ModelManager::verify_sha256(&path, Some(wrong_hash), "bad_model");
-
-        assert!(result.is_err(), "mismatch must return an error");
-        assert!(
-            result.unwrap_err().to_string().contains("corrupt"),
-            "error message should mention corruption"
-        );
-        assert!(
-            !path.exists(),
-            "partial file must be deleted after hash mismatch"
-        );
-    }
-
-    #[test]
-    fn test_verify_sha256_fails_and_deletes_partial_when_file_missing() {
-        // Simulate a partial file that was already removed (e.g. disk full mid-download).
-        let dir = TempDir::new().unwrap();
-        let missing_path = dir.path().join("gone.partial");
-        // Don't create the file — it should not exist.
-
-        let result =
-            ModelManager::verify_sha256(&missing_path, Some("anyexpectedhash"), "missing_model");
-
-        assert!(result.is_err(), "missing file must return an error");
     }
 
     fn push_gguf_str(out: &mut Vec<u8>, val: &str) {

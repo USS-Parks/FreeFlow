@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ask } from "@tauri-apps/plugin-dialog";
+import { ask, open } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 import { ChevronDown, Globe, RefreshCw, Search } from "lucide-react";
 import type { ModelCardStatus } from "@/components/onboarding";
 import { ModelCard } from "@/components/onboarding";
@@ -11,6 +12,7 @@ import {
   supportsLanguageCode,
 } from "@/lib/constants/languages.ts";
 import type { ModelInfo } from "@/bindings";
+import { requestModelInstallConfirmation } from "@/lib/models/modelInstall";
 
 // check if model supports a language based on its supported_languages list
 const modelSupportsLanguage = (model: ModelInfo, langCode: string): boolean => {
@@ -43,6 +45,7 @@ export const ModelsSettings: React.FC = () => {
     loading,
     isRescanning,
     downloadModel,
+    installModelFromFile,
     cancelDownload,
     selectModel,
     deleteModel,
@@ -129,7 +132,28 @@ export const ModelsSettings: React.FC = () => {
   };
 
   const handleModelDownload = async (modelId: string) => {
-    await downloadModel(modelId);
+    try {
+      const plan = await requestModelInstallConfirmation(modelId, t);
+      if (plan) await downloadModel(modelId, plan.manifest_digest);
+    } catch (error) {
+      toast.error(t("modelInstall.planError", { error: String(error) }));
+    }
+  };
+
+  const handleManualInstall = async (modelId: string) => {
+    try {
+      const plan = await requestModelInstallConfirmation(modelId, t);
+      if (!plan) return;
+      const sourcePath = await open({
+        multiple: false,
+        directory: false,
+        filters: [{ name: t("modelInstall.fileFilter"), extensions: ["gguf"] }],
+      });
+      if (typeof sourcePath !== "string") return;
+      await installModelFromFile(modelId, sourcePath, plan.manifest_digest);
+    } catch (error) {
+      toast.error(t("modelInstall.planError", { error: String(error) }));
+    }
   };
 
   const handleModelDelete = async (modelId: string) => {
@@ -371,6 +395,7 @@ export const ModelsSettings: React.FC = () => {
                 status={getModelStatus(model.id)}
                 onSelect={handleModelSelect}
                 onDownload={handleModelDownload}
+                onManualInstall={handleManualInstall}
                 onDelete={handleModelDelete}
                 onCancel={handleModelCancel}
                 downloadProgress={getDownloadProgress(model.id)}
@@ -393,6 +418,7 @@ export const ModelsSettings: React.FC = () => {
                   status={getModelStatus(model.id)}
                   onSelect={handleModelSelect}
                   onDownload={handleModelDownload}
+                  onManualInstall={handleManualInstall}
                   onDelete={handleModelDelete}
                   onCancel={handleModelCancel}
                   downloadProgress={getDownloadProgress(model.id)}

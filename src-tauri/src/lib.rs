@@ -12,6 +12,7 @@ mod helpers;
 mod input;
 mod llm_client;
 mod managers;
+mod model_install;
 mod overlay;
 pub mod portable;
 mod settings;
@@ -588,7 +589,9 @@ pub fn run(cli_args: CliArgs) {
             commands::initialize_shortcuts,
             commands::models::get_available_models,
             commands::models::get_model_info,
+            commands::models::get_model_install_plan,
             commands::models::download_model,
+            commands::models::install_model_from_file,
             commands::models::delete_model,
             commands::models::cancel_download,
             commands::models::set_active_model,
