@@ -1,6 +1,6 @@
 # FreeFlow Upstream Foundation Brief
 
-Status: Planning evidence only — not an FF-G2 completion record
+Status: Superseded by `docs/architecture/ADR-0001-UPSTREAM-FOUNDATION.md`
 Snapshot date: 2026-07-17 (America/Los_Angeles)
 Decision owner: FreeFlow PSPR FF-G2
 

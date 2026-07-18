@@ -1,0 +1,4 @@
+*.gguf
+*.part
+*.tmp
+
