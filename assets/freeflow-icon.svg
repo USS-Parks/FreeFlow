@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">FreeFlow application icon</title>
+  <desc id="desc">Three flowing cyan sound waves on a dark rounded square</desc>
+  <rect width="512" height="512" rx="112" fill="#07131f"/>
+  <path d="M88 214c46 0 46-70 92-70s46 136 92 136 46-88 92-88 46 46 60 46" fill="none" stroke="#35d6d0" stroke-width="36" stroke-linecap="round"/>
+  <path d="M88 286c46 0 46-70 92-70s46 136 92 136 46-88 92-88 46 46 60 46" fill="none" stroke="#68f0b7" stroke-width="26" stroke-linecap="round" opacity=".9"/>
+  <path d="M112 366h288" fill="none" stroke="#baf8ee" stroke-width="18" stroke-linecap="round" opacity=".55"/>
+</svg>

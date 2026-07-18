@@ -82,19 +82,19 @@ Any proposed comparative testing against the proprietary service requires a sepa
 
 ## 6. Reuse ledger
 
-| Area | Default classification | Candidate | Decision rule |
-|---|---|---|---|
-| Cross-platform shell/build | Reuse | Handy/Tauri 2 | Fork if current builds pass both platforms and updater/branding can be replaced cleanly |
-| Audio capture/resampling/VAD | Reuse | Handy Rust core | Preserve if latency and device-switch gates pass |
-| Local ASR adapters/model manager | Reuse then extend | Handy `transcribe-cpp` and `transcribe-rs` seams | Extend only through a stable engine interface |
-| Global shortcuts/tray/autostart | Reuse then repair | Handy | Live-test modifier, press/release, sleep/wake, and stuck-key behavior |
-| Text insertion | Reuse at existing seam | Handy platform code | Harden with app matrix and clipboard preservation |
-| History, dictionary, snippets | Extract concepts; implement at FreeFlow data seam | Handy features where present | Use original schema/API; do not inherit brittle settings storage |
-| UI and floating status control | New implementation over reusable primitives | FreeFlow | Original visual design and copy |
-| Formatting/backtrack/styles | New implementation | Deterministic pipeline plus optional local LLM | Freeze behavioral tests before implementation |
-| Transforms/command mode | New implementation at provider seam | `llama.cpp`-compatible runtime | Optional download; raw text fallback on failure |
-| Scratchpad/insights | New implementation over local database | FreeFlow | No cloud/account dependency |
-| Meeting and sync features | Parked | None | Require separate PSPR |
+| Area                             | Default classification                            | Candidate                                        | Decision rule                                                                           |
+| -------------------------------- | ------------------------------------------------- | ------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| Cross-platform shell/build       | Reuse                                             | Handy/Tauri 2                                    | Fork if current builds pass both platforms and updater/branding can be replaced cleanly |
+| Audio capture/resampling/VAD     | Reuse                                             | Handy Rust core                                  | Preserve if latency and device-switch gates pass                                        |
+| Local ASR adapters/model manager | Reuse then extend                                 | Handy `transcribe-cpp` and `transcribe-rs` seams | Extend only through a stable engine interface                                           |
+| Global shortcuts/tray/autostart  | Reuse then repair                                 | Handy                                            | Live-test modifier, press/release, sleep/wake, and stuck-key behavior                   |
+| Text insertion                   | Reuse at existing seam                            | Handy platform code                              | Harden with app matrix and clipboard preservation                                       |
+| History, dictionary, snippets    | Extract concepts; implement at FreeFlow data seam | Handy features where present                     | Use original schema/API; do not inherit brittle settings storage                        |
+| UI and floating status control   | New implementation over reusable primitives       | FreeFlow                                         | Original visual design and copy                                                         |
+| Formatting/backtrack/styles      | New implementation                                | Deterministic pipeline plus optional local LLM   | Freeze behavioral tests before implementation                                           |
+| Transforms/command mode          | New implementation at provider seam               | `llama.cpp`-compatible runtime                   | Optional download; raw text fallback on failure                                         |
+| Scratchpad/insights              | New implementation over local database            | FreeFlow                                         | No cloud/account dependency                                                             |
+| Meeting and sync features        | Parked                                            | None                                             | Require separate PSPR                                                                   |
 
 ## 7. Global verification gates
 
@@ -302,14 +302,14 @@ Milestone R acceptance: a free, open-source, locally operated Windows/macOS rele
 
 ## 9. Independently approvable milestones
 
-| Milestone | Prompts | Usable cut |
-|---|---|---|
-| G — Audited foundation | FF-G1 through FF-G4 | Clean, buildable, traceable project foundation |
-| V — Local dictation alpha | FF-V1 through FF-V6 | Install → speak → local transcript → reliable insertion/recovery |
-| P — Personalized beta | FF-P1 through FF-P5 | History, privacy controls, dictionary, snippets, formatting, app context |
-| A — Local intelligence beta | FF-A1 through FF-A4 | Optional on-device cleanup, styles, transforms, and command mode |
-| X — Feature-complete RC | FF-X1 through FF-X4 | Full local desktop product against non-parked matrix |
-| R — Public release | FF-R1 through FF-R4 | Hardened, licensed, packaged Windows/macOS release |
+| Milestone                   | Prompts             | Usable cut                                                               |
+| --------------------------- | ------------------- | ------------------------------------------------------------------------ |
+| G — Audited foundation      | FF-G1 through FF-G4 | Clean, buildable, traceable project foundation                           |
+| V — Local dictation alpha   | FF-V1 through FF-V6 | Install → speak → local transcript → reliable insertion/recovery         |
+| P — Personalized beta       | FF-P1 through FF-P5 | History, privacy controls, dictionary, snippets, formatting, app context |
+| A — Local intelligence beta | FF-A1 through FF-A4 | Optional on-device cleanup, styles, transforms, and command mode         |
+| X — Feature-complete RC     | FF-X1 through FF-X4 | Full local desktop product against non-parked matrix                     |
+| R — Public release          | FF-R1 through FF-R4 | Hardened, licensed, packaged Windows/macOS release                       |
 
 ## 10. Prerequisites and blockers
 
@@ -339,13 +339,13 @@ The initiative is complete only when:
 
 ## 13. Plan history
 
-| Date | Version | Change | Execution impact |
-|---|---|---|---|
-| 2026-07-17 | 0.1 | Initial clean-room PSPR, public behavior matrix, upstream reuse strategy, gates, milestones, and exclusions | None; execution remains unauthorized |
-| 2026-07-17 | 0.1 planning note | Added an upstream foundation evidence brief with current candidate SHAs and a preliminary Handy-first decision | None; FF-G2 remains pending and execution unauthorized |
-| 2026-07-17 | 0.2 | User authorized STS; FF-G1 began with public forum/case-study evidence and frozen P0/P1 fixtures | Execution authorized in roster order; clean-room policy remains binding |
-| 2026-07-17 | 0.2 execution | FF-G1 gate passed at `2624d411f4589974513854c16b4cfc0511d4d178`; 19 P0/P1 behaviors map to 19 original fixtures and nine forum sources are classified as unverified hypotheses | FF-G2 is now in progress |
-| 2026-07-17 | 0.3 execution | FF-G2 audited exact Handy/OpenWhispr SHAs on Windows, accepted Handy as the foundation, recorded build/license/vulnerability evidence and a reversible import in ADR-0001, installed Vulkan SDK 1.4.350.0, and verified a local Parakeet evaluation artifact; decision committed at `2ca3ac3aaa7158d2f1b29021254170bb26e59940` | FF-G3 is next; the eight Handy RustSec findings and all upstream branding/network identities are mandatory first-patch scope |
+| Date       | Version           | Change                                                                                                                                                                                                                                                                                                                         | Execution impact                                                                                                             |
+| ---------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| 2026-07-17 | 0.1               | Initial clean-room PSPR, public behavior matrix, upstream reuse strategy, gates, milestones, and exclusions                                                                                                                                                                                                                    | None; execution remains unauthorized                                                                                         |
+| 2026-07-17 | 0.1 planning note | Added an upstream foundation evidence brief with current candidate SHAs and a preliminary Handy-first decision                                                                                                                                                                                                                 | None; FF-G2 remains pending and execution unauthorized                                                                       |
+| 2026-07-17 | 0.2               | User authorized STS; FF-G1 began with public forum/case-study evidence and frozen P0/P1 fixtures                                                                                                                                                                                                                               | Execution authorized in roster order; clean-room policy remains binding                                                      |
+| 2026-07-17 | 0.2 execution     | FF-G1 gate passed at `2624d411f4589974513854c16b4cfc0511d4d178`; 19 P0/P1 behaviors map to 19 original fixtures and nine forum sources are classified as unverified hypotheses                                                                                                                                                 | FF-G2 is now in progress                                                                                                     |
+| 2026-07-17 | 0.3 execution     | FF-G2 audited exact Handy/OpenWhispr SHAs on Windows, accepted Handy as the foundation, recorded build/license/vulnerability evidence and a reversible import in ADR-0001, installed Vulkan SDK 1.4.350.0, and verified a local Parakeet evaluation artifact; decision committed at `2ca3ac3aaa7158d2f1b29021254170bb26e59940` | FF-G3 is next; the eight Handy RustSec findings and all upstream branding/network identities are mandatory first-patch scope |
 
 ## 14. Public research basis
 

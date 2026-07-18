@@ -19,9 +19,9 @@ in `PLANNING/FREEFLOW-UPSTREAM-FOUNDATION-BRIEF.md`.
 
 ## Exact audited inputs
 
-| Upstream | Version | Commit | Tree | License notice to retain |
-|---|---|---|---|---|
-| [cjpais/Handy](https://github.com/cjpais/Handy) | `v0.9.3` | `d861e24bc825c699ccf7215a430684c6e322131c` | `5b91bf5be354d7fa6f267a4f47045db0cfc718bc` | MIT, Copyright (c) 2025 CJ Pais |
+| Upstream                                                          | Version  | Commit                                     | Tree                                       | License notice to retain                                                          |
+| ----------------------------------------------------------------- | -------- | ------------------------------------------ | ------------------------------------------ | --------------------------------------------------------------------------------- |
+| [cjpais/Handy](https://github.com/cjpais/Handy)                   | `v0.9.3` | `d861e24bc825c699ccf7215a430684c6e322131c` | `5b91bf5be354d7fa6f267a4f47045db0cfc718bc` | MIT, Copyright (c) 2025 CJ Pais                                                   |
 | [OpenWhispr/openwhispr](https://github.com/OpenWhispr/openwhispr) | `v1.7.5` | `08ae3a8d2d59fb770fd6efbffe5ae22db25021bc` | `2cfb698e9e076d9e1b3a5a4947983b7c51326691` | MIT, Copyright (c) 2024 OpenWhispr Team, required only if code is later extracted |
 
 Both clean audit clones remained source-clean after dependency installation,
@@ -56,15 +56,15 @@ Vulkan SDK `1.4.350.0`.
 
 ### Handy
 
-| Check | Result |
-|---|---|
-| `bun install --frozen-lockfile` | Pass; 360 packages installed |
-| `bun run lint` | Pass |
-| `bun run format:check` | Pass |
-| `bun run build` | Pass; TypeScript and Vite production build |
+| Check                                              | Result                                                                                       |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `bun install --frozen-lockfile`                    | Pass; 360 packages installed                                                                 |
+| `bun run lint`                                     | Pass                                                                                         |
+| `bun run format:check`                             | Pass                                                                                         |
+| `bun run build`                                    | Pass; TypeScript and Vite production build                                                   |
 | `cargo check --manifest-path src-tauri/Cargo.toml` | Pass after installing the required Vulkan SDK; 9m16s; one upstream unused-assignment warning |
-| `bun run tauri build --no-bundle` | Pass; 23m25s; `handy.exe` produced |
-| `cargo test --manifest-path src-tauri/Cargo.toml` | Pass; 119 passed, 0 failed; 11m39s; two upstream warnings |
+| `bun run tauri build --no-bundle`                  | Pass; 23m25s; `handy.exe` produced                                                           |
+| `cargo test --manifest-path src-tauri/Cargo.toml`  | Pass; 119 passed, 0 failed; 11m39s; two upstream warnings                                    |
 
 The Windows no-model runtime set contains one executable and fourteen DLLs,
 144.6 MiB total. The executable is 46.2 MiB. The native transcription build
@@ -73,15 +73,15 @@ without the SDK CMake fails on the Vulkan library, headers, and `glslc`.
 
 ### OpenWhispr
 
-| Check | Result |
-|---|---|
-| `npm ci` | Pass; 865 packages installed; Electron rebuilt `better-sqlite3` |
-| `npm run quality-check` | Pass; ESLint, Prettier, and TypeScript |
-| `npm test` | Fail; 526 passed, 4 failed, 17 skipped out of 547 |
-| `npm run build:renderer` | Pass |
-| `npm run compile:native` | Pass, but the default shell could not find MSVC and downloaded prebuilt Windows helpers instead |
-| `npm run pack` | Fail after resource preparation because repository config invokes OpenWhispr's Azure Trusted Signing profile |
-| unsigned `electron-builder --dir` audit override | Pass after all Windows-only helpers were fetched; override was temporary and not retained |
+| Check                                            | Result                                                                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `npm ci`                                         | Pass; 865 packages installed; Electron rebuilt `better-sqlite3`                                              |
+| `npm run quality-check`                          | Pass; ESLint, Prettier, and TypeScript                                                                       |
+| `npm test`                                       | Fail; 526 passed, 4 failed, 17 skipped out of 547                                                            |
+| `npm run build:renderer`                         | Pass                                                                                                         |
+| `npm run compile:native`                         | Pass, but the default shell could not find MSVC and downloaded prebuilt Windows helpers instead              |
+| `npm run pack`                                   | Fail after resource preparation because repository config invokes OpenWhispr's Azure Trusted Signing profile |
+| unsigned `electron-builder --dir` audit override | Pass after all Windows-only helpers were fetched; override was temporary and not retained                    |
 
 The four Windows test failures cover corrupt-ZIP rejection, executable-mode
 expectations for a downloaded CUDA binary, and two child-process termination
@@ -162,16 +162,16 @@ graph, not a drop-in dictation core.
 `cargo audit` scanned the exact 841-package lock and found eight
 vulnerabilities plus 28 allowed warnings:
 
-| Package | Advisory | Severity/fix |
-|---|---|---|
-| `quick-xml 0.38.4` | RUSTSEC-2026-0194 | High; upgrade to `>=0.41.0` |
-| `quick-xml 0.38.4` | RUSTSEC-2026-0195 | High; upgrade to `>=0.41.0` |
-| `rustls-webpki 0.103.9` | RUSTSEC-2026-0049 | Upgrade to `>=0.103.10` |
-| `rustls-webpki 0.103.9` | RUSTSEC-2026-0098 | Upgrade to `>=0.103.12` |
-| `rustls-webpki 0.103.9` | RUSTSEC-2026-0099 | Upgrade to `>=0.103.12` |
-| `rustls-webpki 0.103.9` | RUSTSEC-2026-0104 | Upgrade to `>=0.103.13` |
-| `tar 0.4.44` | RUSTSEC-2026-0067 | Medium; upgrade to `>=0.4.45` |
-| `tar 0.4.44` | RUSTSEC-2026-0068 | Medium; upgrade to `>=0.4.45` |
+| Package                 | Advisory          | Severity/fix                  |
+| ----------------------- | ----------------- | ----------------------------- |
+| `quick-xml 0.38.4`      | RUSTSEC-2026-0194 | High; upgrade to `>=0.41.0`   |
+| `quick-xml 0.38.4`      | RUSTSEC-2026-0195 | High; upgrade to `>=0.41.0`   |
+| `rustls-webpki 0.103.9` | RUSTSEC-2026-0049 | Upgrade to `>=0.103.10`       |
+| `rustls-webpki 0.103.9` | RUSTSEC-2026-0098 | Upgrade to `>=0.103.12`       |
+| `rustls-webpki 0.103.9` | RUSTSEC-2026-0099 | Upgrade to `>=0.103.12`       |
+| `rustls-webpki 0.103.9` | RUSTSEC-2026-0104 | Upgrade to `>=0.103.13`       |
+| `tar 0.4.44`            | RUSTSEC-2026-0067 | Medium; upgrade to `>=0.4.45` |
+| `tar 0.4.44`            | RUSTSEC-2026-0068 | Medium; upgrade to `>=0.4.45` |
 
 The warnings include unmaintained GTK3 bindings, `bincode`, and `fxhash`, plus
 yanked WASM packages. FF-G3 must update the resolvable vulnerable packages,
@@ -238,4 +238,3 @@ FreeFlow starts with a proven local dictation core and smaller native runtime,
 while accepting a real rebrand/security/network-hardening patch and ongoing
 Git-fork maintenance. OpenWhispr's broader product ideas remain available as
 public behavior/test references without importing its Electron process graph.
-

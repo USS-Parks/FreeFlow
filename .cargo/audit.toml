@@ -1,0 +1,5 @@
+[advisories]
+ignore = [
+  "RUSTSEC-2026-0194", # Linux-only wayland-scanner -> quick-xml 0.38.4
+  "RUSTSEC-2026-0195", # Linux-only wayland-scanner -> quick-xml 0.38.4
+]

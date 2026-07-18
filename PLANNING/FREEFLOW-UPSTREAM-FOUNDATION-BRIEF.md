@@ -12,18 +12,18 @@ Should FreeFlow begin from Handy, OpenWhispr, selective extraction, or a greenfi
 
 The values below are volatile GitHub metadata captured through the public GitHub API. FF-G2 must refresh them and build the exact candidate commits before making the final pin.
 
-| Attribute | Handy | OpenWhispr |
-|---|---|---|
-| Repository | [cjpais/Handy](https://github.com/cjpais/handy) | [OpenWhispr/openwhispr](https://github.com/OpenWhispr/openwhispr) |
-| Candidate commit | `d861e24bc825c699ccf7215a430684c6e322131c` | `08ae3a8d2d59fb770fd6efbffe5ae22db25021bc` |
-| Latest release at snapshot | `v0.9.3` (2026-07-15) | `v1.7.5` (2026-07-11) |
-| Declared license | MIT | MIT |
-| Primary shell | Tauri 2 | Electron 41 |
-| Primary implementation | Rust plus React/TypeScript | Node/Electron plus React/TypeScript and native C/Swift helpers |
-| Git tree paths | 444 | 763 |
-| GitHub repository size | 11,386 KB | 36,754 KB |
-| Stars / forks at snapshot | 26,780 / 2,309 | 4,616 / 648 |
-| Open issues at snapshot | 179 | 230 |
+| Attribute                  | Handy                                           | OpenWhispr                                                        |
+| -------------------------- | ----------------------------------------------- | ----------------------------------------------------------------- |
+| Repository                 | [cjpais/Handy](https://github.com/cjpais/handy) | [OpenWhispr/openwhispr](https://github.com/OpenWhispr/openwhispr) |
+| Candidate commit           | `d861e24bc825c699ccf7215a430684c6e322131c`      | `08ae3a8d2d59fb770fd6efbffe5ae22db25021bc`                        |
+| Latest release at snapshot | `v0.9.3` (2026-07-15)                           | `v1.7.5` (2026-07-11)                                             |
+| Declared license           | MIT                                             | MIT                                                               |
+| Primary shell              | Tauri 2                                         | Electron 41                                                       |
+| Primary implementation     | Rust plus React/TypeScript                      | Node/Electron plus React/TypeScript and native C/Swift helpers    |
+| Git tree paths             | 444                                             | 763                                                               |
+| GitHub repository size     | 11,386 KB                                       | 36,754 KB                                                         |
+| Stars / forks at snapshot  | 26,780 / 2,309                                  | 4,616 / 648                                                       |
+| Open issues at snapshot    | 179                                             | 230                                                               |
 
 Repository size, stars, and issue counts are orientation signals, not quality gates.
 
@@ -31,27 +31,27 @@ Repository size, stars, and issue counts are orientation signals, not quality ga
 
 At candidate `08ae3a8d2d59fb770fd6efbffe5ae22db25021bc`, public manifests and the recursive Git tree show:
 
-| Measure | Count |
-|---|---:|
-| Runtime npm dependencies | 60 |
-| Development npm dependencies | 21 |
-| Named `download:*` package scripts | 20 |
-| Named `compile:*` package scripts | 14 |
-| Native/platform source paths in the narrow C/Swift/helper scan | 25 |
-| Inference-provider implementation files | 12 |
-| Standalone `*.test.js` files | 59 |
-| Main-process entry file size | 60,797 bytes |
+| Measure                                                        |        Count |
+| -------------------------------------------------------------- | -----------: |
+| Runtime npm dependencies                                       |           60 |
+| Development npm dependencies                                   |           21 |
+| Named `download:*` package scripts                             |           20 |
+| Named `compile:*` package scripts                              |           14 |
+| Native/platform source paths in the narrow C/Swift/helper scan |           25 |
+| Inference-provider implementation files                        |           12 |
+| Standalone `*.test.js` files                                   |           59 |
+| Main-process entry file size                                   | 60,797 bytes |
 
 A path-name classification provides a second view of removal/isolation work. These categories overlap and must not be added together:
 
-| Subsystem signal | Matching source/build files |
-|---|---:|
-| Authentication, billing, enterprise, team, workspace, referral and invitation | 34 |
-| Meeting, system audio, diarization and speaker identity | 45 |
-| Agent, chat and tool execution | 44 |
-| Notes, synchronization, embeddings, Qdrant and vector search | 43 |
-| Cloud/provider/network integrations | 64 |
-| Native helpers and platform build/download tooling | 75 |
+| Subsystem signal                                                              | Matching source/build files |
+| ----------------------------------------------------------------------------- | --------------------------: |
+| Authentication, billing, enterprise, team, workspace, referral and invitation |                          34 |
+| Meeting, system audio, diarization and speaker identity                       |                          45 |
+| Agent, chat and tool execution                                                |                          44 |
+| Notes, synchronization, embeddings, Qdrant and vector search                  |                          43 |
+| Cloud/provider/network integrations                                           |                          64 |
+| Native helpers and platform build/download tooling                            |                          75 |
 
 For comparison, Handy's captured tree has 444 paths, 27 frontend runtime dependencies, 14 frontend development dependencies and 14 narrowly classified platform-native/build paths. Handy also has Rust dependencies that require a separate transitive audit; these counts do not claim its total supply chain is only 41 packages.
 
@@ -72,19 +72,19 @@ Therefore OpenWhispr's complexity is not that it has "many files." It is that se
 
 ## Capability comparison
 
-| Area | Handy evidence | OpenWhispr evidence | Planning assessment |
-|---|---|---|---|
-| Local-first posture | README describes entirely local transcription; local model catalog and hash/download code; no account required | Local Whisper/Parakeet and local reasoning exist, but cloud/auth/team paths are first-class | Handy aligns more closely with FreeFlow’s default trust boundary |
-| Windows and macOS | Tauri configurations, Windows and macOS target dependencies, installers, autostart, permissions | Electron Builder targets, platform-native shortcut/paste/audio helpers | Both are viable; each still requires live builds |
-| Audio and VAD | Rust `cpal`, resampler, Silero VAD, audio manager/coordinator | Web/native audio managers, platform taps, VAD, meeting AEC helpers | Handy has the smaller core-dictation surface |
-| ASR | `transcribe-cpp` Whisper-family plus `transcribe-rs` ONNX engines; Metal on macOS and Vulkan/dynamic backends on Windows x64 | whisper.cpp, sherpa-onnx/Parakeet, CUDA/Vulkan managers and sidecars | Both cover local ASR; Handy integrates it in the Rust core |
-| Shortcut and insertion | Tauri/global shortcut, `rdev`, `handy-keys`, `enigo`, clipboard and input modules | Dedicated C/Swift key listeners, fast-paste helpers and clipboard restoration tests | Handy is the simpler starting seam; OpenWhispr is useful as a robustness reference |
-| Local history | `rusqlite`, migrations, history manager/commands/settings | `better-sqlite3`, history view and transcription services | Both have reusable concepts; schemas require audit |
-| Dictionary | Custom-word settings and correction threshold | Dictionary view/service, correction learner and echo filter | OpenWhispr has broader observable coverage |
-| Snippets | No dedicated snippet files in the captured tree | Snippets view/service/database tests and matching utilities | FreeFlow must implement this at its own service seam; OpenWhispr may inform tests |
-| Post-processing | Prompt settings and an LLM client oriented around provider/API paths; optional Apple Intelligence code | Bundled/downloadable llama-server path plus many cloud providers | FreeFlow needs a local-only provider contract; neither path should be accepted unchanged |
-| Notes, agents, meetings | Not a core focus | Extensive notes, local reasoning, agent, meeting, diarization and calendar code | Valuable later reference, but importing it would violate initial scope discipline |
-| Test/build surface | Rust checks, Playwright, build and release workflows | Node helper tests, CodeQL, platform native builds and release workflows | Handy is smaller; neither test suite proves FreeFlow’s live gates |
+| Area                    | Handy evidence                                                                                                               | OpenWhispr evidence                                                                         | Planning assessment                                                                      |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Local-first posture     | README describes entirely local transcription; local model catalog and hash/download code; no account required               | Local Whisper/Parakeet and local reasoning exist, but cloud/auth/team paths are first-class | Handy aligns more closely with FreeFlow’s default trust boundary                         |
+| Windows and macOS       | Tauri configurations, Windows and macOS target dependencies, installers, autostart, permissions                              | Electron Builder targets, platform-native shortcut/paste/audio helpers                      | Both are viable; each still requires live builds                                         |
+| Audio and VAD           | Rust `cpal`, resampler, Silero VAD, audio manager/coordinator                                                                | Web/native audio managers, platform taps, VAD, meeting AEC helpers                          | Handy has the smaller core-dictation surface                                             |
+| ASR                     | `transcribe-cpp` Whisper-family plus `transcribe-rs` ONNX engines; Metal on macOS and Vulkan/dynamic backends on Windows x64 | whisper.cpp, sherpa-onnx/Parakeet, CUDA/Vulkan managers and sidecars                        | Both cover local ASR; Handy integrates it in the Rust core                               |
+| Shortcut and insertion  | Tauri/global shortcut, `rdev`, `handy-keys`, `enigo`, clipboard and input modules                                            | Dedicated C/Swift key listeners, fast-paste helpers and clipboard restoration tests         | Handy is the simpler starting seam; OpenWhispr is useful as a robustness reference       |
+| Local history           | `rusqlite`, migrations, history manager/commands/settings                                                                    | `better-sqlite3`, history view and transcription services                                   | Both have reusable concepts; schemas require audit                                       |
+| Dictionary              | Custom-word settings and correction threshold                                                                                | Dictionary view/service, correction learner and echo filter                                 | OpenWhispr has broader observable coverage                                               |
+| Snippets                | No dedicated snippet files in the captured tree                                                                              | Snippets view/service/database tests and matching utilities                                 | FreeFlow must implement this at its own service seam; OpenWhispr may inform tests        |
+| Post-processing         | Prompt settings and an LLM client oriented around provider/API paths; optional Apple Intelligence code                       | Bundled/downloadable llama-server path plus many cloud providers                            | FreeFlow needs a local-only provider contract; neither path should be accepted unchanged |
+| Notes, agents, meetings | Not a core focus                                                                                                             | Extensive notes, local reasoning, agent, meeting, diarization and calendar code             | Valuable later reference, but importing it would violate initial scope discipline        |
+| Test/build surface      | Rust checks, Playwright, build and release workflows                                                                         | Node helper tests, CodeQL, platform native builds and release workflows                     | Handy is smaller; neither test suite proves FreeFlow’s live gates                        |
 
 ## Supply-chain and adaptation risks
 
