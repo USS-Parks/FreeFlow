@@ -380,7 +380,7 @@ fn start(
         publish_state(app, shared, DictationStage::Idle, None, None);
         return;
     };
-    action.start(app, binding_id, hotkey_string);
+    action.start(app, binding_id, hotkey_string, received_at);
     if app
         .try_state::<Arc<AudioRecordingManager>>()
         .is_some_and(|a| a.is_recording())

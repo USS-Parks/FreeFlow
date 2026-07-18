@@ -5,6 +5,7 @@
 
 use log::warn;
 use std::sync::Arc;
+use std::time::Instant;
 use tauri::{AppHandle, Manager};
 
 use crate::actions::ACTION_MAP;
@@ -56,14 +57,14 @@ pub fn handle_shortcut_event(
     if binding_id == "cancel" {
         let audio_manager = app.state::<Arc<AudioRecordingManager>>();
         if audio_manager.is_recording() && is_pressed {
-            action.start(app, binding_id, hotkey_string);
+            action.start(app, binding_id, hotkey_string, Instant::now());
         }
         return;
     }
 
     // Remaining bindings (e.g. "test") use simple start/stop on press/release.
     if is_pressed {
-        action.start(app, binding_id, hotkey_string);
+        action.start(app, binding_id, hotkey_string, Instant::now());
     } else {
         action.stop(app, binding_id, hotkey_string);
     }

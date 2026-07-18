@@ -50,7 +50,13 @@ impl Drop for FinishGuard {
 
 // Shortcut Action Trait
 pub trait ShortcutAction: Send + Sync {
-    fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str);
+    fn start(
+        &self,
+        app: &AppHandle,
+        binding_id: &str,
+        shortcut_str: &str,
+        activation_received_at: Instant,
+    );
     fn stop(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str);
 }
 
@@ -491,7 +497,13 @@ pub(crate) async fn process_transcription_output(
 }
 
 impl ShortcutAction for TranscribeAction {
-    fn start(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
+    fn start(
+        &self,
+        app: &AppHandle,
+        binding_id: &str,
+        _shortcut_str: &str,
+        activation_received_at: Instant,
+    ) {
         let start_time = Instant::now();
         debug!("TranscribeAction::start called for binding: {}", binding_id);
 
@@ -552,7 +564,11 @@ impl ShortcutAction for TranscribeAction {
             OverlayStyle::Live | OverlayStyle::Minimal => show_recording_overlay(app),
             OverlayStyle::None => {} // show_overlay_state no-ops on None anyway
         }
-        let feedback_latency_ms = start_time.elapsed().as_secs_f64() * 1_000.0;
+        // Measure from the shortcut/signal entering the coordinator rather than
+        // from this action beginning. This includes coordinator queue latency
+        // and makes the event comparable to the 150 ms activation-to-feedback
+        // live gate.
+        let feedback_latency_ms = activation_received_at.elapsed().as_secs_f64() * 1_000.0;
         info!(
             "FF-V2 recording feedback dispatched in {:.2}ms",
             feedback_latency_ms
@@ -950,7 +966,13 @@ impl ShortcutAction for TranscribeAction {
 struct CancelAction;
 
 impl ShortcutAction for CancelAction {
-    fn start(&self, app: &AppHandle, _binding_id: &str, _shortcut_str: &str) {
+    fn start(
+        &self,
+        app: &AppHandle,
+        _binding_id: &str,
+        _shortcut_str: &str,
+        _activation_received_at: Instant,
+    ) {
         utils::cancel_current_operation(app);
     }
 
@@ -963,7 +985,13 @@ impl ShortcutAction for CancelAction {
 struct TestAction;
 
 impl ShortcutAction for TestAction {
-    fn start(&self, app: &AppHandle, binding_id: &str, shortcut_str: &str) {
+    fn start(
+        &self,
+        app: &AppHandle,
+        binding_id: &str,
+        shortcut_str: &str,
+        _activation_received_at: Instant,
+    ) {
         log::info!(
             "Shortcut ID '{}': Started - {} (App: {})", // Changed "Pressed" to "Started" for consistency
             binding_id,

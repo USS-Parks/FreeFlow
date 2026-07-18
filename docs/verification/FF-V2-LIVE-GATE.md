@@ -14,7 +14,11 @@ freeflow --verify-audio 1 --repeat 50 --json
 
 The verifier uses the production `AudioRecordingManager`, configured device,
 CPAL stream, resampler, recorder command channel, and cancellation path. It
-does not load an ASR model and does not persist the probe audio.
+does not load an ASR model, does not persist the probe audio, and does not
+claim to measure visible-feedback latency. Its `microphone_ready_*` values
+measure the distinct on-demand stream-open path. The 150 ms feedback gate is
+measured from shortcut receipt through `recording-feedback-metric` dispatch in
+the interactive application.
 
 ## Windows evidence captured this session
 
@@ -29,6 +33,21 @@ does not load an ASR model and does not persist the probe audio.
 - Cancellation probe returned the manager to idle.
 - On-demand microphone-ready latency was 504.72 ms p95. This is recorded as a
   performance finding, not mislabeled as the UI feedback threshold.
+
+## Windows continuation evidence after verifier correction
+
+- The corrected verifier completed another 50/50 configured-default microphone
+  cycles from the current FF-V2 source and exited successfully.
+- Every cycle contained non-zero input. Sample counts remained 16,320–20,000
+  at 16 kHz mono and cancellation again returned the manager to idle.
+- On-demand microphone-ready latency was 164.21 ms p95. The JSON reports this
+  as `microphone_ready_p95_ms` and explicitly reports
+  `feedback_gate_measured: false`; it no longer fails or passes the distinct
+  150 ms visible-feedback gate from this headless measurement.
+- The interactive application gate was not rerun during this continuation so
+  the user's foreground Windows session remained available. No shortcut,
+  first-word, hot-plug, contention, sleep/wake, or visible-feedback pass is
+  inferred from the headless result.
 
 ## Remaining required live matrix
 

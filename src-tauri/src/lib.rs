@@ -526,7 +526,7 @@ fn run_headless_audio_verification(
         .clone()
         .unwrap_or_else(|| "default".to_string());
     let runs = repeat.unwrap_or(1).max(1);
-    let mut start_ms = Vec::with_capacity(runs);
+    let mut microphone_ready_ms = Vec::with_capacity(runs);
     let mut sample_counts = Vec::with_capacity(runs);
     let mut peaks = Vec::with_capacity(runs);
 
@@ -537,7 +537,7 @@ fn run_headless_audio_verification(
             eprintln!("error: microphone start failed: {error}");
             return 1;
         }
-        start_ms.push(started.elapsed().as_secs_f64() * 1_000.0);
+        microphone_ready_ms.push(started.elapsed().as_secs_f64() * 1_000.0);
         std::thread::sleep(Duration::from_secs(seconds));
         let generation = manager.cancel_generation();
         let Some(samples) = manager.stop_recording(&binding_id, generation) else {
@@ -573,19 +573,18 @@ fn run_headless_audio_verification(
         return 1;
     }
 
-    start_ms.sort_by(|left, right| left.total_cmp(right));
-    let p95_index = ((start_ms.len() as f64 * 0.95).ceil() as usize)
+    microphone_ready_ms.sort_by(|left, right| left.total_cmp(right));
+    let p95_index = ((microphone_ready_ms.len() as f64 * 0.95).ceil() as usize)
         .saturating_sub(1)
-        .min(start_ms.len().saturating_sub(1));
-    let start_p95_ms = start_ms[p95_index];
-    let passed_150_ms = start_p95_ms <= 150.0;
+        .min(microphone_ready_ms.len().saturating_sub(1));
+    let microphone_ready_p95_ms = microphone_ready_ms[p95_index];
     let result = serde_json::json!({
         "requested_device": requested_device,
         "runs": runs,
         "seconds_per_run": seconds,
-        "start_ms": start_ms,
-        "start_p95_ms": start_p95_ms,
-        "passed_150_ms": passed_150_ms,
+        "microphone_ready_ms": microphone_ready_ms,
+        "microphone_ready_p95_ms": microphone_ready_p95_ms,
+        "feedback_gate_measured": false,
         "sample_counts": sample_counts,
         "peaks": peaks,
         "cancellation_returned_idle": true,
@@ -598,16 +597,12 @@ fn run_headless_audio_verification(
         );
     } else {
         println!(
-            "microphone={} runs={} start_p95={:.2}ms samples={:?} peaks={:?} cancel=idle",
-            requested_device, runs, start_p95_ms, sample_counts, peaks
+            "microphone={} runs={} ready_p95={:.2}ms samples={:?} peaks={:?} cancel=idle",
+            requested_device, runs, microphone_ready_p95_ms, sample_counts, peaks
         );
     }
 
-    if passed_150_ms {
-        0
-    } else {
-        1
-    }
+    0
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
