@@ -65,6 +65,18 @@ The log is append-only once STS execution begins. A prompt is not complete until
 - Commit SHA: gate candidate `af7a3b2746737eec869344cbb5f2387b0d55ef75`; FF-V2 remains in progress.
 - Deviations or remaining work: interactive 50-cycle feedback/first-word evidence, 20 toggle cycles, physical selected-device hot-plug/reconnect, Zoom/Teams/browser contention, sleep/wake, and macOS permission/device evidence remain mandatory. No FF-V3 ASR quality claim is implied.
 
+### 2026-07-18 — FF-V2 verifier correction (in progress)
+
+- Objective: Separate the headless microphone-ready diagnostic from the 150 ms interactive visible-feedback gate and measure application feedback from shortcut receipt rather than after coordinator queueing.
+- Starting commit: `5c948da53e9ff41026b558ccf8390a2fb3417226` on `codex/ff-v2-audio-state`.
+- Reuse classification: focused correction at the existing FF-V2 action/coordinator and headless verifier seams; no new dependency or product surface.
+- Files changed: shortcut action activation timestamp propagation; feedback metric origin; headless verifier JSON/exit semantics; FF-V2 live-gate interpretation and continuation evidence.
+- Verification commands: `bun install --frozen-lockfile`; `bun run lint`; `bun run format:check`; `bun run build`; `bun run check:translations`; `cargo test --manifest-path src-tauri/Cargo.toml`; `cargo build --manifest-path src-tauri/Cargo.toml`; `freeflow --verify-audio 1 --repeat 50 --json`; `bun run tauri build --no-bundle`; `cargo audit -f src-tauri/Cargo.lock`; `scripts/check-foundation-provenance.sh`; `git diff --check`.
+- Live-system evidence: the corrected Windows configured-default probe completed 50/50 non-zero captures, returned 16,320–20,000 16 kHz samples per cycle, reported `microphone_ready_p95_ms: 164.2139`, explicitly reported `feedback_gate_measured: false`, and returned idle after cancellation. The optimized artifact is 43,785,728 bytes with SHA-256 `79a91513a8d445fd1887813d212a9b3990e4ff8d7767df5973525ef81b9f157f`.
+- Result: correction pass. Frozen installation reported 366 installs across 442 packages with no changes; lint, format, frontend build, translations, 145 ordinary Rust tests with two large model tests ignored, debug/release builds, RustSec policy, provenance, live capture, and diff checks passed. RustSec found no denied vulnerability and the existing 28 allowed upstream warnings.
+- Commit SHA: `e6e44dcd969d5da0ee0ceb8c2f38a471d3f9db8a`.
+- Deviations or remaining work: the warnings-denied clippy attempt did not reach linting because a concurrent native transcribe/Vulkan cache build failed with `Access is denied` during parallel shader generation; it is an environment non-result, not a pass or source failure. No foreground GUI or input automation was continued while the user used the Windows host. Interactive Windows and macOS live evidence remains mandatory, so FF-V2 is not complete.
+
 ## Entry template
 
 ### YYYY-MM-DD — FF-XX
