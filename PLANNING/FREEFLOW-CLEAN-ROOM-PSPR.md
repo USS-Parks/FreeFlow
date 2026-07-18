@@ -1,7 +1,7 @@
 # FreeFlow Local Dictation Clean-Room PSPR
 
-Status: **Approved — STS active; FF-G1 in progress**
-Version: 0.1
+Status: **Approved — STS active; FF-G1 complete; FF-G2 in progress**
+Version: 0.2
 Date: 2026-07-17
 Canonical repository: `C:\Users\17076\Documents\FreeFlow`
 Canonical remote: `https://github.com/USS-Parks/FreeFlow` (public; empty at plan-draft time)
@@ -344,6 +344,7 @@ The initiative is complete only when:
 | 2026-07-17 | 0.1 | Initial clean-room PSPR, public behavior matrix, upstream reuse strategy, gates, milestones, and exclusions | None; execution remains unauthorized |
 | 2026-07-17 | 0.1 planning note | Added an upstream foundation evidence brief with current candidate SHAs and a preliminary Handy-first decision | None; FF-G2 remains pending and execution unauthorized |
 | 2026-07-17 | 0.2 | User authorized STS; FF-G1 began with public forum/case-study evidence and frozen P0/P1 fixtures | Execution authorized in roster order; clean-room policy remains binding |
+| 2026-07-17 | 0.2 execution | FF-G1 gate passed at `2624d411f4589974513854c16b4cfc0511d4d178`; 19 P0/P1 behaviors map to 19 original fixtures and nine forum sources are classified as unverified hypotheses | FF-G2 is now in progress |
 
 ## 14. Public research basis
 

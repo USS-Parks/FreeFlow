@@ -8,7 +8,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 |---|---|---|---|---|---|---|
 | 2026-07-17 | PLAN-001 | Complete | `README.md`, `PLANNING/FREEFLOW-CLEAN-ROOM-PSPR.md`, `docs/legal/CLEAN-ROOM-POLICY.md`, `docs/product/BEHAVIOR-PARITY-MATRIX.md`, `docs/DEVLOG.md` | Documentation review pending | Uncommitted | Initial canonical plan drafted; no product execution authorized |
 | 2026-07-17 | PLAN-002 | Complete | `README.md`, `PLANNING/FREEFLOW-CLEAN-ROOM-PSPR.md`, `PLANNING/FREEFLOW-UPSTREAM-FOUNDATION-BRIEF.md`, `docs/DEVLOG.md` | GitHub API evidence and documentation checks pending | Uncommitted | Planning-only upstream snapshot; Handy preliminary foundation candidate; FF-G2 not executed |
-| 2026-07-17 | FF-G1 | In progress | Public-source ledger, P0/P1 fixtures, parity matrix, clean-room policy, PSPR status and upstream complexity brief | Source/fixture coverage and Markdown checks pending | Pending | STS authorized; public forums treated as unverified risk hypotheses, not proprietary implementation evidence |
+| 2026-07-17 | FF-G1 | Complete | Public-source ledger, P0/P1 fixtures, parity matrix, clean-room policy, PSPR status and upstream complexity brief | 19/19 P0/P1 fixture mapping; 9 forum sources; relative-link, STS marker, encoding and staged whitespace checks passed | `2624d411f4589974513854c16b4cfc0511d4d178` | Public forums are unverified risk hypotheses, not proprietary implementation evidence |
 
 ## Entry template
 
