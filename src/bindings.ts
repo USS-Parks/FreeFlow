@@ -1066,6 +1066,12 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async getMicrophoneDiagnostics(): Promise<MicrophoneDiagnostics> {
+    return await TAURI_INVOKE("get_microphone_diagnostics");
+  },
+  async getDictationState(): Promise<DictationStateEvent> {
+    return await TAURI_INVOKE("get_dictation_state");
+  },
   async setSelectedMicrophone(
     deviceName: string,
   ): Promise<Result<null, string>> {
@@ -1281,10 +1287,8 @@ export const commands = {
     }
   },
   /**
-   * Checks if the Mac is a laptop by detecting battery presence
-   *
-   * This uses pmset to check for battery information.
-   * Returns true if a battery is detected (laptop), false otherwise (desktop)
+   * Stub implementation for non-macOS platforms
+   * Always returns false since laptop detection is macOS-specific
    */
   async isLaptop(): Promise<Result<boolean, string>> {
     try {
@@ -1299,10 +1303,12 @@ export const commands = {
 /** user-defined events **/
 
 export const events = __makeEvents__<{
+  dictationStateEvent: DictationStateEvent;
   historyUpdatePayload: HistoryUpdatePayload;
   streamPhaseEvent: StreamPhaseEvent;
   streamTextEvent: StreamTextEvent;
 }>({
+  dictationStateEvent: "dictation-state-event",
   historyUpdatePayload: "history-update-payload",
   streamPhaseEvent: "stream-phase-event",
   streamTextEvent: "stream-text-event",
@@ -1412,6 +1418,18 @@ export type BindingResponse = {
 };
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard";
 export type CustomSounds = { start: boolean; stop: boolean };
+export type DictationStage =
+  | "idle"
+  | "starting"
+  | "recording"
+  | "processing"
+  | "cancelling";
+export type DictationStateEvent = {
+  stage: DictationStage;
+  binding_id: string | null;
+  sequence: number;
+  feedback_latency_ms: number | null;
+};
 export type EngineType =
   /**
    * Any GGML/GGUF model loaded through transcribe-cpp (Whisper, Parakeet,
@@ -1460,6 +1478,21 @@ export type ImplementationChangeResult = {
 export type KeyboardImplementation = "tauri" | "handy_keys";
 export type LLMPrompt = { id: string; name: string; prompt: string };
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
+export type MicrophoneDiagnosticStatus =
+  | "ready"
+  | "permission_denied"
+  | "no_input_device"
+  | "selected_device_missing"
+  | "enumeration_failed";
+export type MicrophoneDiagnostics = {
+  status: MicrophoneDiagnosticStatus;
+  requested_device: string;
+  resolved_device: string | null;
+  available_devices: AudioDevice[];
+  stream_open: boolean;
+  recording: boolean;
+  detail: string | null;
+};
 export type ModelInfo = {
   id: string;
   name: string;
@@ -1518,8 +1551,9 @@ export type ModelLoadStatus = {
  */
 export type ModelSource =
   /**
-   * An audited FreeFlow manifest. The backend resolves all security-critical
-   * install data from this stable identifier.
+   * An audited FreeFlow manifest. The caller supplies only this stable id;
+   * the backend resolves the reviewed URL, revision, size, hash, licenses,
+   * and destination from `crate::catalog`.
    */
   | { Manifest: { manifest_id: string } }
   /**

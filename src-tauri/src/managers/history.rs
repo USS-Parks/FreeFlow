@@ -13,6 +13,7 @@ use log::{debug, error, info};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
@@ -77,6 +78,13 @@ impl HistoryManager {
 
         // Initialize database and run migrations synchronously
         manager.init_database()?;
+        let recovered = manager.recover_retryable_recordings()?;
+        if recovered > 0 {
+            info!(
+                "Recovered {} finalized recording(s) without a history row",
+                recovered
+            );
+        }
 
         Ok(manager)
     }
@@ -192,6 +200,49 @@ impl HistoryManager {
 
     pub fn recordings_dir(&self) -> &std::path::Path {
         &self.recordings_dir
+    }
+
+    /// Reconcile captures that were atomically finalized before a crash but did
+    /// not yet receive their retryable history row. Invalid, empty, and hidden
+    /// in-progress files are never imported.
+    fn recover_retryable_recordings(&self) -> Result<usize> {
+        for entry in fs::read_dir(&self.recordings_dir)? {
+            let path = entry?.path();
+            let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+                continue;
+            };
+            if name.starts_with(".freeflow-capture-") && name.ends_with(".part") {
+                if let Err(error) = fs::remove_file(&path) {
+                    error!("Failed to remove interrupted capture {:?}: {}", path, error);
+                }
+            }
+        }
+
+        let conn = self.get_connection()?;
+        let mut statement = conn.prepare("SELECT file_name FROM transcription_history")?;
+        let referenced_names = statement
+            .query_map([], |row| row.get::<_, String>(0))?
+            .collect::<rusqlite::Result<HashSet<_>>>()?;
+        drop(statement);
+        drop(conn);
+
+        let candidates = crate::audio_toolkit::retryable_wav_candidates(
+            &self.recordings_dir,
+            &referenced_names,
+        )?;
+        let mut recovered = 0;
+        for path in candidates {
+            let Some(file_name) = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .map(str::to_owned)
+            else {
+                continue;
+            };
+            self.save_entry(file_name, String::new(), false, None, None)?;
+            recovered += 1;
+        }
+        Ok(recovered)
     }
 
     /// Save a new history entry to the database.

@@ -126,6 +126,24 @@ pub enum MicrophoneMode {
     OnDemand,
 }
 
+fn resolve_named_device_index(
+    requested_name: Option<&str>,
+    available_names: &[String],
+) -> Result<Option<usize>, String> {
+    let Some(requested_name) = requested_name else {
+        return Ok(None);
+    };
+    available_names
+        .iter()
+        .position(|name| name == requested_name)
+        .map(Some)
+        .ok_or_else(|| {
+            format!(
+                "Selected microphone '{requested_name}' is not available; it may be disconnected"
+            )
+        })
+}
+
 /* ──────────────────────────────────────────────────────────────── */
 
 fn create_audio_recorder(
@@ -133,11 +151,8 @@ fn create_audio_recorder(
     app_handle: &tauri::AppHandle,
     stream_router: Arc<StreamRouter>,
 ) -> Result<AudioRecorder, anyhow::Error> {
-    // A single Silero engine covers both the offline and streaming policies (never
-    // active at once within a recording), so the recorder reconfigures its
-    // hangover tail per session rather than keeping two ONNX sessions resident.
     let silero = SileroVad::new(vad_path, VAD_THRESHOLD)
-        .map_err(|e| anyhow::anyhow!("Failed to create SileroVad: {}", e))?;
+        .map_err(|error| anyhow::anyhow!("Failed to create SileroVad: {error}"))?;
     let smoothed_vad = SmoothedVad::new(
         Box::new(silero),
         VAD_PREFILL_FRAMES,
@@ -257,12 +272,15 @@ impl AudioRecordingManager {
         *self.cached_device.lock().unwrap() = None;
     }
 
-    fn get_effective_microphone_device(&self, settings: &AppSettings) -> Option<cpal::Device> {
+    fn get_effective_microphone_device(
+        &self,
+        settings: &AppSettings,
+    ) -> Result<Option<cpal::Device>, anyhow::Error> {
         let device_name = match self.desired_device_name(settings) {
             Some(name) => name,
             None => {
                 debug!("device resolve: no mic configured -> system default");
-                return None;
+                return Ok(None);
             }
         };
 
@@ -271,22 +289,27 @@ impl AudioRecordingManager {
         if let Some((cached_name, device)) = self.cached_device.lock().unwrap().as_ref() {
             if *cached_name == device_name {
                 debug!("device resolve: cache hit for '{}'", device_name);
-                return Some(device.clone());
+                return Ok(Some(device.clone()));
             }
         }
 
-        // Find the device by name
+        // Find the requested device by name. A missing explicit selection must
+        // never silently fall back to the system default: that would make the
+        // picker untruthful and could capture from the wrong microphone.
         let enumerate_started = Instant::now();
-        let device = match list_input_devices() {
-            Ok(devices) => devices
-                .into_iter()
-                .find(|d| d.name == device_name)
-                .map(|d| d.device),
-            Err(e) => {
-                debug!("Failed to list devices, using default: {}", e);
-                None
-            }
+        let devices = list_input_devices()
+            .map_err(|error| anyhow::anyhow!("Failed to list input devices: {error}"))?;
+        let available_names: Vec<String> =
+            devices.iter().map(|device| device.name.clone()).collect();
+        let Some(selected_index) = resolve_named_device_index(Some(&device_name), &available_names)
+            .map_err(anyhow::Error::msg)?
+        else {
+            return Ok(None);
         };
+        let device = devices
+            .into_iter()
+            .nth(selected_index)
+            .map(|info| info.device);
         debug!(
             "device resolve: enumerate={:?} (found={})",
             enumerate_started.elapsed(),
@@ -295,7 +318,7 @@ impl AudioRecordingManager {
         if let Some(d) = &device {
             *self.cached_device.lock().unwrap() = Some((device_name, d.clone()));
         }
-        device
+        Ok(device)
     }
 
     fn schedule_lazy_close(&self) {
@@ -349,14 +372,22 @@ impl AudioRecordingManager {
     pub fn preload_vad(&self) -> Result<(), anyhow::Error> {
         let mut recorder_opt = self.recorder.lock().unwrap();
         if recorder_opt.is_none() {
-            let vad_path = self
+            let bundled_vad_path = self
                 .app_handle
                 .path()
                 .resolve(
                     "resources/models/silero_vad_v4.onnx",
                     tauri::path::BaseDirectory::Resource,
                 )
-                .map_err(|e| anyhow::anyhow!("Failed to resolve VAD path: {}", e))?;
+                .map_err(|error| anyhow::anyhow!("Failed to resolve VAD path: {error}"))?;
+            #[cfg(debug_assertions)]
+            let vad_path = if bundled_vad_path.exists() {
+                bundled_vad_path
+            } else {
+                Path::new(env!("CARGO_MANIFEST_DIR")).join("resources/models/silero_vad_v4.onnx")
+            };
+            #[cfg(not(debug_assertions))]
+            let vad_path = bundled_vad_path;
             *recorder_opt = Some(create_audio_recorder(
                 &vad_path,
                 &self.app_handle,
@@ -386,7 +417,7 @@ impl AudioRecordingManager {
         // "No input device found" error this used to check for.
         let settings = get_settings(&self.app_handle);
         let resolve_started = Instant::now();
-        let selected_device = self.get_effective_microphone_device(&settings);
+        let selected_device = self.get_effective_microphone_device(&settings)?;
         let resolve_elapsed = resolve_started.elapsed();
 
         // Ensure VAD is loaded if it wasn't for whatever reason
@@ -403,7 +434,7 @@ impl AudioRecordingManager {
                 // retry once before surfacing the error.
                 warn!("Recorder open failed ({first_err}); re-resolving device and retrying once");
                 self.invalidate_device_cache();
-                let fresh_device = self.get_effective_microphone_device(&settings);
+                let fresh_device = self.get_effective_microphone_device(&settings)?;
                 rec.open(fresh_device)
                     .map_err(|e| anyhow::anyhow!("Failed to open recorder: {}", e))?;
             }
@@ -514,6 +545,9 @@ impl AudioRecordingManager {
     }
 
     pub fn update_selected_device(&self) -> Result<(), anyhow::Error> {
+        if self.is_recording() {
+            anyhow::bail!("Cannot change microphones while recording or stopping");
+        }
         // Device settings changed; drop the cached resolution so the next
         // open re-enumerates. (The name-keyed cache would miss anyway; this
         // just avoids holding a stale cpal::Device alive.)
@@ -618,6 +652,10 @@ impl AudioRecordingManager {
         )
     }
 
+    pub fn is_stream_open(&self) -> bool {
+        *self.is_open.lock().unwrap()
+    }
+
     /// Cancel any ongoing recording without returning audio samples
     pub fn cancel_recording(&self) {
         self.cancel_generation.fetch_add(1, Ordering::AcqRel);
@@ -648,5 +686,35 @@ impl AudioRecordingManager {
             }
             RecordingState::Idle => {}
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve_named_device_index;
+
+    #[test]
+    fn default_selection_defers_to_the_current_system_default() {
+        assert_eq!(
+            resolve_named_device_index(None, &["Built-in".to_string()]),
+            Ok(None)
+        );
+    }
+
+    #[test]
+    fn explicit_selection_resolves_without_fallback() {
+        let devices = vec!["Built-in".to_string(), "USB Mic".to_string()];
+        assert_eq!(
+            resolve_named_device_index(Some("USB Mic"), &devices),
+            Ok(Some(1))
+        );
+    }
+
+    #[test]
+    fn disconnected_selection_is_actionable_instead_of_using_default() {
+        let error = resolve_named_device_index(Some("USB Mic"), &["Built-in".to_string()])
+            .expect_err("missing selected device must fail");
+        assert!(error.contains("USB Mic"));
+        assert!(error.contains("disconnected"));
     }
 }

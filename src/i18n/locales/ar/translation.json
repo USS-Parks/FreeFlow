@@ -621,7 +621,11 @@
     "modelLoadFailedUnknown": "نموذج غير معروف",
     "pasteFailedTitle": "فشل لصق النص",
     "pasteFailed": "تعذر لصق النص في التطبيق النشط.",
-    "transcriptionFailedTitle": "فشل التفريغ النصي"
+    "transcriptionFailedTitle": "فشل التفريغ النصي",
+    "selectedDeviceMissingTitle": "Selected Microphone Disconnected",
+    "selectedDeviceMissing": "Reconnect the selected microphone or choose another device in Settings.",
+    "recordingPersistenceFailedTitle": "Recording Could Not Be Saved",
+    "recordingPersistenceFailed": "FreeFlow can continue, but this recording will not be available for retry."
   },
   "appLanguage": {
     "title": "لغة التطبيق",

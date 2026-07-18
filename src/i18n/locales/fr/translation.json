@@ -621,7 +621,11 @@
     "modelLoadFailedUnknown": "modèle inconnu",
     "pasteFailedTitle": "Échec du collage du texte",
     "pasteFailed": "Le texte n'a pas pu être collé dans l'application active.",
-    "transcriptionFailedTitle": "Échec de la transcription"
+    "transcriptionFailedTitle": "Échec de la transcription",
+    "selectedDeviceMissingTitle": "Selected Microphone Disconnected",
+    "selectedDeviceMissing": "Reconnect the selected microphone or choose another device in Settings.",
+    "recordingPersistenceFailedTitle": "Recording Could Not Be Saved",
+    "recordingPersistenceFailed": "FreeFlow can continue, but this recording will not be available for retry."
   },
   "appLanguage": {
     "title": "Langue de l'application",

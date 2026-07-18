@@ -14,8 +14,50 @@ The complete retained MIT notice is in `LICENSE`. FreeFlow's name, product
 identity, behavior specifications, and post-import changes are independent and
 are not endorsed by the Handy authors.
 
-Dependency and model licenses remain their respective owners' licenses. Model
-weights are not distributed from this repository.
+Dependency and model licenses remain their respective owners' licenses. ASR
+weights are not distributed from this repository; the small Silero VAD model
+below is the sole bundled inference weight.
+
+## Bundled Silero VAD V4 model
+
+FreeFlow bundles `src-tauri/resources/models/silero_vad_v4.onnx` for local
+voice-activity detection.
+
+- Upstream project: https://github.com/snakers4/silero-vad
+- Vendored source: `cjpais/vad-rs` commit
+  `2a412ed858695b9251f3f5a1a20d95b59fa7c498`, path
+  `tests/fixtures/silero_vad_v4.onnx`
+- Size: 1,807,522 bytes
+- Git blob: `e6db48d6e2a0797a2ec173c008384f7710189344`
+- SHA-256: `a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28`
+- License: MIT
+
+The machine-readable provenance record is
+`src-tauri/resources/models/silero-vad-v4.json`.
+
+```text
+MIT License
+
+Copyright (c) 2020-present Silero Team
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Optional Parakeet model
 

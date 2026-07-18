@@ -15,7 +15,7 @@ use crate::utils::{
 };
 use crate::TranscriptionCoordinator;
 use ferrous_opencc::{config::BuiltinConfig, OpenCC};
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::future::Future;
@@ -30,6 +30,11 @@ const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(25);
 struct RecordingErrorEvent {
     error_type: String,
     detail: Option<String>,
+}
+
+#[derive(Clone, serde::Serialize)]
+struct RecordingFeedbackMetric {
+    latency_ms: f64,
 }
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
@@ -93,6 +98,31 @@ where
             tokio::time::timeout(CANCELLATION_POLL_INTERVAL, operation.as_mut()).await
         {
             return Some(result);
+        }
+    }
+}
+
+/// FF-V2 cancellation policy: cancelling an active recording or processing
+/// operation discards its audio. If persistence already committed a retry row,
+/// remove the row and WAV together; otherwise remove the orphan WAV directly.
+async fn discard_cancelled_capture(
+    history: &HistoryManager,
+    pending_entry_id: Option<i64>,
+    wav_path: &std::path::Path,
+) {
+    if let Some(id) = pending_entry_id {
+        if let Err(error) = history.delete_entry(id).await {
+            error!(
+                "Failed to discard cancelled history entry {}: {}",
+                id, error
+            );
+        }
+    } else if wav_path.exists() {
+        if let Err(error) = std::fs::remove_file(wav_path) {
+            error!(
+                "Failed to discard cancelled recording {:?}: {}",
+                wav_path, error
+            );
         }
     }
 }
@@ -522,6 +552,17 @@ impl ShortcutAction for TranscribeAction {
             OverlayStyle::Live | OverlayStyle::Minimal => show_recording_overlay(app),
             OverlayStyle::None => {} // show_overlay_state no-ops on None anyway
         }
+        let feedback_latency_ms = start_time.elapsed().as_secs_f64() * 1_000.0;
+        info!(
+            "FF-V2 recording feedback dispatched in {:.2}ms",
+            feedback_latency_ms
+        );
+        let _ = app.emit(
+            "recording-feedback-metric",
+            RecordingFeedbackMetric {
+                latency_ms: feedback_latency_ms,
+            },
+        );
         // Everything above runs before capture can begin, so each span here is
         // added keypress->capture latency.
         debug!(
@@ -591,6 +632,8 @@ impl ShortcutAction for TranscribeAction {
                     "microphone_permission_denied"
                 } else if is_no_input_device_error(&err) {
                     "no_input_device"
+                } else if err.contains("Selected microphone") && err.contains("not available") {
+                    "selected_device_missing"
                 } else {
                     "unknown"
                 };
@@ -678,9 +721,12 @@ impl ShortcutAction for TranscribeAction {
                     utils::hide_recording_overlay(&ah);
                     change_tray_icon(&ah, TrayIconState::Idle);
                 } else {
-                    // Save WAV concurrently with transcription
+                    // Commit the WAV before transcription begins. The atomic
+                    // no-clobber save plus an empty history row makes a stopped
+                    // recording retryable even if the process exits during ASR.
                     let sample_count = samples.len();
-                    let file_name = format!("freeflow-{}.wav", chrono::Utc::now().timestamp());
+                    let file_name =
+                        format!("freeflow-{}.wav", chrono::Utc::now().timestamp_micros());
                     let wav_path = hm.recordings_dir().join(&file_name);
                     let wav_path_for_verify = wav_path.clone();
                     let samples_for_wav = samples.clone();
@@ -688,23 +734,7 @@ impl ShortcutAction for TranscribeAction {
                         crate::audio_toolkit::save_wav_file(&wav_path, &samples_for_wav)
                     });
 
-                    // Transcribe concurrently with WAV save. If a live stream was
-                    // running, finalize it and use its text (all audio was already
-                    // fed to the stream); otherwise batch-transcribe the samples.
-                    let transcription_time = Instant::now();
-                    let transcription_result = match tm.finalize_stream() {
-                        // A finalized stream with usable text wins. An empty result
-                        // (no active stream, produced nothing, or a finalize error
-                        // after the engine was returned) falls back to a full batch
-                        // transcription of the same audio. A finalize timeout is
-                        // surfaced instead — the worker may still hold the engine,
-                        // so a batch fallback would contend with it.
-                        Ok(Some(text)) if !text.trim().is_empty() => Ok(text),
-                        Ok(_) => tm.transcribe(samples),
-                        Err(err) => Err(err),
-                    };
-
-                    // Await WAV save and verify
+                    // Await the durable WAV save and verify it before ASR.
                     let wav_saved = match wav_handle.await {
                         Ok(Ok(())) => {
                             match crate::audio_toolkit::verify_wav_file(
@@ -728,12 +758,58 @@ impl ShortcutAction for TranscribeAction {
                         }
                     };
 
-                    if rm.was_cancelled_since(cancel_generation) {
-                        debug!("Transcription operation cancelled before output handling");
+                    let pending_entry = if wav_saved {
+                        match hm.save_entry(
+                            file_name.clone(),
+                            String::new(),
+                            post_process,
+                            None,
+                            None,
+                        ) {
+                            Ok(entry) => Some(entry),
+                            Err(error) => {
+                                error!("Failed to create retryable history entry: {}", error);
+                                None
+                            }
+                        }
+                    } else {
+                        let _ = ah.emit(
+                            "recording-persistence-error",
+                            "The recording could not be saved for retry.",
+                        );
+                        None
+                    };
+
+                    if !wav_saved {
+                        error!(
+                            "Aborting transcription because the source recording was not persisted"
+                        );
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                         return;
                     }
+
+                    if rm.was_cancelled_since(cancel_generation) {
+                        debug!("Transcription operation cancelled before output handling");
+                        discard_cancelled_capture(
+                            &hm,
+                            pending_entry.as_ref().map(|entry| entry.id),
+                            &wav_path_for_verify,
+                        )
+                        .await;
+                        utils::hide_recording_overlay(&ah);
+                        change_tray_icon(&ah, TrayIconState::Idle);
+                        return;
+                    }
+
+                    // If a live stream was running, finalize it and use its text;
+                    // otherwise batch-transcribe the same committed samples.
+                    let transcription_time = Instant::now();
+                    let transcription_result = match tm.finalize_stream() {
+                        Ok(Some(text)) if !text.trim().is_empty() => Ok(text),
+                        Ok(_) => tm.transcribe(samples),
+                        Err(err) => Err(err),
+                    };
 
                     match transcription_result {
                         Ok(transcription) => {
@@ -757,6 +833,12 @@ impl ShortcutAction for TranscribeAction {
                             .await
                             else {
                                 debug!("Transcription operation cancelled during output handling");
+                                discard_cancelled_capture(
+                                    &hm,
+                                    pending_entry.as_ref().map(|entry| entry.id),
+                                    &wav_path_for_verify,
+                                )
+                                .await;
                                 utils::hide_recording_overlay(&ah);
                                 change_tray_icon(&ah, TrayIconState::Idle);
                                 return;
@@ -764,21 +846,25 @@ impl ShortcutAction for TranscribeAction {
 
                             if rm.was_cancelled_since(cancel_generation) {
                                 debug!("Transcription operation cancelled before paste");
+                                discard_cancelled_capture(
+                                    &hm,
+                                    pending_entry.as_ref().map(|entry| entry.id),
+                                    &wav_path_for_verify,
+                                )
+                                .await;
                                 utils::hide_recording_overlay(&ah);
                                 change_tray_icon(&ah, TrayIconState::Idle);
                                 return;
                             }
 
-                            // Save to history if WAV was saved
-                            if wav_saved {
-                                if let Err(err) = hm.save_entry(
-                                    file_name,
+                            if let Some(entry) = &pending_entry {
+                                if let Err(err) = hm.update_transcription(
+                                    entry.id,
                                     transcription,
-                                    post_process,
                                     processed.post_processed_text.clone(),
                                     processed.post_process_prompt.clone(),
                                 ) {
-                                    error!("Failed to save history entry: {}", err);
+                                    error!("Failed to complete retryable history entry: {}", err);
                                 }
                             }
 
@@ -823,6 +909,12 @@ impl ShortcutAction for TranscribeAction {
                                 debug!(
                                     "Transcription operation cancelled after transcription error"
                                 );
+                                discard_cancelled_capture(
+                                    &hm,
+                                    pending_entry.as_ref().map(|entry| entry.id),
+                                    &wav_path_for_verify,
+                                )
+                                .await;
                                 utils::hide_recording_overlay(&ah);
                                 change_tray_icon(&ah, TrayIconState::Idle);
                                 return;
@@ -832,18 +924,7 @@ impl ShortcutAction for TranscribeAction {
                             // Surface the failure to the UI (toast). The full
                             // message is also in freeflow.log via the line above.
                             let _ = ah.emit("transcription-error", err.to_string());
-                            // Save entry with empty text so user can retry
-                            if wav_saved {
-                                if let Err(save_err) = hm.save_entry(
-                                    file_name,
-                                    String::new(),
-                                    post_process,
-                                    None,
-                                    None,
-                                ) {
-                                    error!("Failed to save failed history entry: {}", save_err);
-                                }
-                            }
+                            // The empty pending history row remains retryable.
                             utils::hide_recording_overlay(&ah);
                             change_tray_icon(&ah, TrayIconState::Idle);
                         }

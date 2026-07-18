@@ -53,7 +53,12 @@ pub struct CliArgs {
     #[arg(long)]
     pub list_models: bool,
 
-    /// Repeat the transcription N times (best_ms reports the fastest run).
+    /// Record from the configured microphone for N seconds, verify non-empty
+    /// 16 kHz capture, exercise cancellation, and exit. No ASR model is loaded.
+    #[arg(long, value_name = "SECONDS")]
+    pub verify_audio: Option<u64>,
+
+    /// Repeat the transcription or audio-capture verification N times.
     #[arg(long, value_name = "N")]
     pub repeat: Option<usize>,
 

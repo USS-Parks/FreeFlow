@@ -621,7 +621,11 @@
     "modelLoadFailedUnknown": "mô hình không xác định",
     "pasteFailedTitle": "Không thể dán văn bản",
     "pasteFailed": "Không thể dán văn bản vào ứng dụng đang hoạt động.",
-    "transcriptionFailedTitle": "Phiên âm thất bại"
+    "transcriptionFailedTitle": "Phiên âm thất bại",
+    "selectedDeviceMissingTitle": "Selected Microphone Disconnected",
+    "selectedDeviceMissing": "Reconnect the selected microphone or choose another device in Settings.",
+    "recordingPersistenceFailedTitle": "Recording Could Not Be Saved",
+    "recordingPersistenceFailed": "FreeFlow can continue, but this recording will not be available for retry."
   },
   "appLanguage": {
     "title": "Ngôn ngữ ứng dụng",

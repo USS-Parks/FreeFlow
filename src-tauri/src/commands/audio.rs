@@ -2,6 +2,7 @@ use crate::audio_feedback;
 use crate::audio_toolkit::audio::{list_input_devices, list_output_devices};
 use crate::managers::audio::{AudioRecordingManager, MicrophoneMode};
 use crate::settings::{get_settings, write_settings};
+use crate::TranscriptionCoordinator;
 use log::warn;
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -39,6 +40,27 @@ pub struct AudioDevice {
     pub index: String,
     pub name: String,
     pub is_default: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum MicrophoneDiagnosticStatus {
+    Ready,
+    PermissionDenied,
+    NoInputDevice,
+    SelectedDeviceMissing,
+    EnumerationFailed,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct MicrophoneDiagnostics {
+    pub status: MicrophoneDiagnosticStatus,
+    pub requested_device: String,
+    pub resolved_device: Option<String>,
+    pub available_devices: Vec<AudioDevice>,
+    pub stream_open: bool,
+    pub recording: bool,
+    pub detail: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
@@ -199,19 +221,123 @@ pub fn get_available_microphones() -> Result<Vec<AudioDevice>, String> {
 
 #[tauri::command]
 #[specta::specta]
+pub fn get_microphone_diagnostics(app: AppHandle) -> MicrophoneDiagnostics {
+    let manager = app.state::<Arc<AudioRecordingManager>>();
+    let settings = get_settings(&app);
+    let requested_device = settings
+        .selected_microphone
+        .clone()
+        .unwrap_or_else(|| "default".to_string());
+    let permissions = get_windows_microphone_permission_status();
+
+    let (mut status, available_devices, resolved_device, mut detail) = match list_input_devices() {
+        Ok(devices) if devices.is_empty() => (
+            MicrophoneDiagnosticStatus::NoInputDevice,
+            Vec::new(),
+            None,
+            Some("No audio input device was detected".to_string()),
+        ),
+        Ok(devices) => {
+            let available: Vec<AudioDevice> = devices
+                .iter()
+                .map(|device| AudioDevice {
+                    index: device.index.clone(),
+                    name: device.name.clone(),
+                    is_default: device.is_default,
+                })
+                .collect();
+            match &settings.selected_microphone {
+                    Some(selected) => match devices.iter().find(|device| &device.name == selected) {
+                        Some(device) => (
+                            MicrophoneDiagnosticStatus::Ready,
+                            available,
+                            Some(device.name.clone()),
+                            None,
+                        ),
+                        None => (
+                            MicrophoneDiagnosticStatus::SelectedDeviceMissing,
+                            available,
+                            None,
+                            Some(format!(
+                                "Selected microphone '{selected}' is not available; it may be disconnected"
+                            )),
+                        ),
+                    },
+                    None => (
+                        MicrophoneDiagnosticStatus::Ready,
+                        available,
+                        devices
+                            .iter()
+                            .find(|device| device.is_default)
+                            .map(|device| device.name.clone()),
+                        None,
+                    ),
+                }
+        }
+        Err(error) => (
+            MicrophoneDiagnosticStatus::EnumerationFailed,
+            Vec::new(),
+            None,
+            Some(format!("Failed to list audio devices: {error}")),
+        ),
+    };
+
+    if permissions.supported && permissions.overall_access == PermissionAccess::Denied {
+        status = MicrophoneDiagnosticStatus::PermissionDenied;
+        detail = Some("Microphone access is denied by Windows privacy settings".to_string());
+    }
+
+    MicrophoneDiagnostics {
+        status,
+        requested_device,
+        resolved_device,
+        available_devices,
+        stream_open: manager.is_stream_open(),
+        recording: manager.is_recording(),
+        detail,
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_dictation_state(
+    app: AppHandle,
+) -> crate::transcription_coordinator::DictationStateEvent {
+    app.state::<TranscriptionCoordinator>().state()
+}
+
+fn validated_microphone_selection(device_name: &str) -> Result<Option<String>, String> {
+    if device_name == "default" {
+        return Ok(None);
+    }
+    let devices =
+        list_input_devices().map_err(|error| format!("Failed to list audio devices: {error}"))?;
+    if devices.iter().any(|device| device.name == device_name) {
+        Ok(Some(device_name.to_string()))
+    } else {
+        Err(format!(
+            "Selected microphone '{device_name}' is not available; reconnect it and try again"
+        ))
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn set_selected_microphone(app: AppHandle, device_name: String) -> Result<(), String> {
     let mut settings = get_settings(&app);
-    settings.selected_microphone = if device_name == "default" {
-        None
-    } else {
-        Some(device_name)
-    };
+    let previous_selection = settings.selected_microphone.clone();
+    settings.selected_microphone = validated_microphone_selection(&device_name)?;
     write_settings(&app, settings);
 
     // Update the audio manager to use the new device
     let rm = app.state::<Arc<AudioRecordingManager>>();
-    rm.update_selected_device()
-        .map_err(|e| format!("Failed to update selected device: {}", e))?;
+    if let Err(error) = rm.update_selected_device() {
+        let mut rollback = get_settings(&app);
+        rollback.selected_microphone = previous_selection;
+        write_settings(&app, rollback);
+        let _ = rm.update_selected_device();
+        return Err(format!("Failed to update selected device: {error}"));
+    }
 
     Ok(())
 }
@@ -286,13 +412,36 @@ pub async fn play_test_sound(app: AppHandle, sound_type: String) {
 #[specta::specta]
 pub fn set_clamshell_microphone(app: AppHandle, device_name: String) -> Result<(), String> {
     let mut settings = get_settings(&app);
-    settings.clamshell_microphone = if device_name == "default" {
-        None
-    } else {
-        Some(device_name)
-    };
+    let previous_selection = settings.clamshell_microphone.clone();
+    settings.clamshell_microphone = validated_microphone_selection(&device_name)?;
     write_settings(&app, settings);
+    let manager = app.state::<Arc<AudioRecordingManager>>();
+    if let Err(error) = manager.update_selected_device() {
+        let mut rollback = get_settings(&app);
+        rollback.clamshell_microphone = previous_selection;
+        write_settings(&app, rollback);
+        let _ = manager.update_selected_device();
+        return Err(format!("Failed to update clamshell microphone: {error}"));
+    }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{MicrophoneDiagnosticStatus, PermissionAccess};
+
+    #[test]
+    fn diagnostic_status_and_permission_values_serialize_stably() {
+        assert_eq!(
+            serde_json::to_string(&MicrophoneDiagnosticStatus::SelectedDeviceMissing)
+                .expect("status serialization"),
+            "\"selected_device_missing\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PermissionAccess::Denied).expect("permission serialization"),
+            "\"denied\""
+        );
+    }
 }
 
 #[tauri::command]

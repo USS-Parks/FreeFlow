@@ -112,11 +112,26 @@ function App() {
         toast.error(t("errors.noInputDeviceTitle"), {
           description: t("errors.noInputDevice"),
         });
+      } else if (error_type === "selected_device_missing") {
+        toast.error(t("errors.selectedDeviceMissingTitle"), {
+          description: detail ?? t("errors.selectedDeviceMissing"),
+        });
       } else {
         toast.error(
           t("errors.recordingFailed", { error: detail ?? "Unknown error" }),
         );
       }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
+  useEffect(() => {
+    const unlisten = listen<string>("recording-persistence-error", () => {
+      toast.error(t("errors.recordingPersistenceFailedTitle"), {
+        description: t("errors.recordingPersistenceFailed"),
+      });
     });
     return () => {
       unlisten.then((fn) => fn());

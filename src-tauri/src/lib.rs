@@ -321,6 +321,10 @@ fn show_main_window_command(app: AppHandle) -> Result<(), String> {
 fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
     use std::time::Instant;
 
+    if let Some(seconds) = args.verify_audio {
+        return run_headless_audio_verification(app, seconds.max(1), args.repeat, args.json);
+    }
+
     // --list-devices: print registered compute devices (with indices) and exit.
     // Useful on multi-GPU machines to discover the index for --device-index.
     if args.list_devices {
@@ -506,6 +510,106 @@ fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
     0
 }
 
+fn run_headless_audio_verification(
+    app: &AppHandle,
+    seconds: u64,
+    repeat: Option<usize>,
+    json: bool,
+) -> i32 {
+    use crate::audio_toolkit::VadPolicy;
+    use std::time::{Duration, Instant};
+
+    let manager = app.state::<Arc<AudioRecordingManager>>();
+    let settings = get_settings(app);
+    let requested_device = settings
+        .selected_microphone
+        .clone()
+        .unwrap_or_else(|| "default".to_string());
+    let runs = repeat.unwrap_or(1).max(1);
+    let mut start_ms = Vec::with_capacity(runs);
+    let mut sample_counts = Vec::with_capacity(runs);
+    let mut peaks = Vec::with_capacity(runs);
+
+    for run in 0..runs {
+        let binding_id = format!("ff-v2-live-{run}");
+        let started = Instant::now();
+        if let Err(error) = manager.try_start_recording(&binding_id, VadPolicy::Disabled) {
+            eprintln!("error: microphone start failed: {error}");
+            return 1;
+        }
+        start_ms.push(started.elapsed().as_secs_f64() * 1_000.0);
+        std::thread::sleep(Duration::from_secs(seconds));
+        let generation = manager.cancel_generation();
+        let Some(samples) = manager.stop_recording(&binding_id, generation) else {
+            eprintln!("error: microphone stop returned no capture");
+            return 1;
+        };
+        let peak = samples
+            .iter()
+            .map(|sample| sample.abs())
+            .fold(0.0_f32, f32::max);
+        if samples.len() < seconds as usize * 8_000 {
+            eprintln!(
+                "error: capture {} returned only {} samples for {} second(s)",
+                run + 1,
+                samples.len(),
+                seconds
+            );
+            return 1;
+        }
+        sample_counts.push(samples.len());
+        peaks.push(peak);
+    }
+
+    let cancel_binding = "ff-v2-live-cancel";
+    if let Err(error) = manager.try_start_recording(cancel_binding, VadPolicy::Disabled) {
+        eprintln!("error: cancellation probe start failed: {error}");
+        return 1;
+    }
+    std::thread::sleep(Duration::from_millis(100));
+    manager.cancel_recording();
+    if manager.is_recording() {
+        eprintln!("error: cancellation probe left the manager recording");
+        return 1;
+    }
+
+    start_ms.sort_by(|left, right| left.total_cmp(right));
+    let p95_index = ((start_ms.len() as f64 * 0.95).ceil() as usize)
+        .saturating_sub(1)
+        .min(start_ms.len().saturating_sub(1));
+    let start_p95_ms = start_ms[p95_index];
+    let passed_150_ms = start_p95_ms <= 150.0;
+    let result = serde_json::json!({
+        "requested_device": requested_device,
+        "runs": runs,
+        "seconds_per_run": seconds,
+        "start_ms": start_ms,
+        "start_p95_ms": start_p95_ms,
+        "passed_150_ms": passed_150_ms,
+        "sample_counts": sample_counts,
+        "peaks": peaks,
+        "cancellation_returned_idle": true,
+    });
+
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&result).unwrap_or_default()
+        );
+    } else {
+        println!(
+            "microphone={} runs={} start_p95={:.2}ms samples={:?} peaks={:?} cancel=idle",
+            requested_device, runs, start_p95_ms, sample_counts, peaks
+        );
+    }
+
+    if passed_150_ms {
+        0
+    } else {
+        1
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run(cli_args: CliArgs) {
     // Detect portable mode before anything else
@@ -604,6 +708,8 @@ pub fn run(cli_args: CliArgs) {
             commands::audio::get_windows_microphone_permission_status,
             commands::audio::open_microphone_privacy_settings,
             commands::audio::get_available_microphones,
+            commands::audio::get_microphone_diagnostics,
+            commands::audio::get_dictation_state,
             commands::audio::set_selected_microphone,
             commands::audio::get_selected_microphone,
             commands::audio::get_available_output_devices,
@@ -631,6 +737,7 @@ pub fn run(cli_args: CliArgs) {
             managers::history::HistoryUpdatePayload,
             managers::transcription::StreamTextEvent,
             managers::transcription::StreamPhaseEvent,
+            transcription_coordinator::DictationStateEvent,
         ]);
 
     #[cfg(debug_assertions)] // <- Only export on non-release builds
@@ -645,8 +752,10 @@ pub fn run(cli_args: CliArgs) {
 
     // The headless path must run as its own instance (see the single-instance
     // note below), not forward to an already-running app.
-    let headless_mode =
-        cli_args.transcribe_file.is_some() || cli_args.list_devices || cli_args.list_models;
+    let headless_mode = cli_args.transcribe_file.is_some()
+        || cli_args.list_devices
+        || cli_args.list_models
+        || cli_args.verify_audio.is_some();
 
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
@@ -757,6 +866,17 @@ pub fn run(cli_args: CliArgs) {
                 );
                 app_handle.manage(model_manager);
                 app_handle.manage(transcription_manager);
+                if cli_args.verify_audio.is_some() {
+                    let transcription_manager = app_handle.state::<Arc<TranscriptionManager>>();
+                    let recording_manager = Arc::new(
+                        AudioRecordingManager::new(
+                            &app_handle,
+                            transcription_manager.stream_router(),
+                        )
+                        .expect("Failed to initialize recording manager for audio verification"),
+                    );
+                    app_handle.manage(recording_manager);
+                }
                 managers::transcription::init_transcribe_backend();
                 managers::transcription::apply_accelerator_settings(&app_handle);
 

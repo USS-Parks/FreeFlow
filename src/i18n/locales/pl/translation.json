@@ -621,7 +621,11 @@
     "modelLoadFailedUnknown": "nieznany model",
     "pasteFailedTitle": "Nie udało się wkleić tekstu",
     "pasteFailed": "Nie można było wkleić tekstu do aktywnej aplikacji.",
-    "transcriptionFailedTitle": "Transkrypcja nie powiodła się"
+    "transcriptionFailedTitle": "Transkrypcja nie powiodła się",
+    "selectedDeviceMissingTitle": "Selected Microphone Disconnected",
+    "selectedDeviceMissing": "Reconnect the selected microphone or choose another device in Settings.",
+    "recordingPersistenceFailedTitle": "Recording Could Not Be Saved",
+    "recordingPersistenceFailed": "FreeFlow can continue, but this recording will not be available for retry."
   },
   "appLanguage": {
     "title": "Język aplikacji",

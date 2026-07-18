@@ -1,11 +1,14 @@
 use crate::actions::ACTION_MAP;
 use crate::managers::audio::AudioRecordingManager;
 use log::{debug, error, warn};
+use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::sync::mpsc::{self, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Manager};
+use tauri_specta::Event;
 
 const DEBOUNCE: Duration = Duration::from_millis(30);
 const RELEASE_GRACE: Duration = Duration::from_millis(50);
@@ -30,6 +33,7 @@ enum Command {
         hotkey_string: String,
         is_pressed: bool,
         push_to_talk: bool,
+        received_at: Instant,
     },
     Cancel {
         recording_was_active: bool,
@@ -42,6 +46,46 @@ enum Stage {
     Idle,
     Recording(String), // binding_id
     Processing,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum DictationStage {
+    Idle,
+    Starting,
+    Recording,
+    Processing,
+    Cancelling,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, Type, tauri_specta::Event)]
+pub struct DictationStateEvent {
+    pub stage: DictationStage,
+    pub binding_id: Option<String>,
+    pub sequence: u64,
+    pub feedback_latency_ms: Option<f64>,
+}
+
+fn publish_state(
+    app: &AppHandle,
+    shared: &Arc<Mutex<DictationStateEvent>>,
+    stage: DictationStage,
+    binding_id: Option<&str>,
+    feedback_latency: Option<Duration>,
+) {
+    let event = {
+        let mut state = shared
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        state.stage = stage;
+        state.binding_id = binding_id.map(str::to_owned);
+        state.sequence = state.sequence.saturating_add(1);
+        state.feedback_latency_ms = feedback_latency.map(|elapsed| elapsed.as_secs_f64() * 1_000.0);
+        state.clone()
+    };
+    if let Err(error) = event.emit(app) {
+        warn!("Failed to emit dictation state: {error}");
+    }
 }
 
 fn classify_ptt_event(
@@ -73,6 +117,7 @@ fn classify_ptt_event(
 /// the async transcribe-paste pipeline.
 pub struct TranscriptionCoordinator {
     tx: Sender<Command>,
+    state: Arc<Mutex<DictationStateEvent>>,
 }
 
 pub fn is_transcribe_binding(id: &str) -> bool {
@@ -82,6 +127,13 @@ pub fn is_transcribe_binding(id: &str) -> bool {
 impl TranscriptionCoordinator {
     pub fn new(app: AppHandle) -> Self {
         let (tx, rx) = mpsc::channel();
+        let state = Arc::new(Mutex::new(DictationStateEvent {
+            stage: DictationStage::Idle,
+            binding_id: None,
+            sequence: 0,
+            feedback_latency_ms: None,
+        }));
+        let thread_state = Arc::clone(&state);
 
         thread::spawn(move || {
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -104,6 +156,7 @@ impl TranscriptionCoordinator {
                                             &mut stage,
                                             &pending.binding_id,
                                             &pending.hotkey_string,
+                                            &thread_state,
                                         );
                                     }
                                 }
@@ -124,6 +177,7 @@ impl TranscriptionCoordinator {
                             hotkey_string,
                             is_pressed,
                             push_to_talk,
+                            received_at,
                         } => {
                             let pending_release_binding = pending_release
                                 .as_ref()
@@ -168,19 +222,45 @@ impl TranscriptionCoordinator {
 
                             if push_to_talk {
                                 if is_pressed && matches!(stage, Stage::Idle) {
-                                    start(&app, &mut stage, &binding_id, &hotkey_string);
+                                    start(
+                                        &app,
+                                        &mut stage,
+                                        &binding_id,
+                                        &hotkey_string,
+                                        received_at,
+                                        &thread_state,
+                                    );
                                 } else if !is_pressed
                                     && matches!(&stage, Stage::Recording(id) if id == &binding_id)
                                 {
-                                    stop(&app, &mut stage, &binding_id, &hotkey_string);
+                                    stop(
+                                        &app,
+                                        &mut stage,
+                                        &binding_id,
+                                        &hotkey_string,
+                                        &thread_state,
+                                    );
                                 }
                             } else if is_pressed {
                                 match &stage {
                                     Stage::Idle => {
-                                        start(&app, &mut stage, &binding_id, &hotkey_string);
+                                        start(
+                                            &app,
+                                            &mut stage,
+                                            &binding_id,
+                                            &hotkey_string,
+                                            received_at,
+                                            &thread_state,
+                                        );
                                     }
                                     Stage::Recording(id) if id == &binding_id => {
-                                        stop(&app, &mut stage, &binding_id, &hotkey_string);
+                                        stop(
+                                            &app,
+                                            &mut stage,
+                                            &binding_id,
+                                            &hotkey_string,
+                                            &thread_state,
+                                        );
                                     }
                                     _ => {
                                         debug!("Ignoring press for '{binding_id}': pipeline busy")
@@ -197,10 +277,26 @@ impl TranscriptionCoordinator {
                                 && (recording_was_active || matches!(stage, Stage::Recording(_)))
                             {
                                 stage = Stage::Idle;
+                                publish_state(
+                                    &app,
+                                    &thread_state,
+                                    DictationStage::Idle,
+                                    None,
+                                    None,
+                                );
+                            } else if matches!(stage, Stage::Processing) {
+                                publish_state(
+                                    &app,
+                                    &thread_state,
+                                    DictationStage::Cancelling,
+                                    None,
+                                    None,
+                                );
                             }
                         }
                         Command::ProcessingFinished => {
                             stage = Stage::Idle;
+                            publish_state(&app, &thread_state, DictationStage::Idle, None, None);
                         }
                     }
                 }
@@ -211,7 +307,7 @@ impl TranscriptionCoordinator {
             }
         });
 
-        Self { tx }
+        Self { tx, state }
     }
 
     /// Send a keyboard/signal input event for a transcribe binding.
@@ -230,6 +326,7 @@ impl TranscriptionCoordinator {
                 hotkey_string: hotkey_string.to_string(),
                 is_pressed,
                 push_to_talk,
+                received_at: Instant::now(),
             })
             .is_err()
         {
@@ -254,11 +351,33 @@ impl TranscriptionCoordinator {
             warn!("Transcription coordinator channel closed");
         }
     }
+
+    pub fn state(&self) -> DictationStateEvent {
+        self.state
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clone()
+    }
 }
 
-fn start(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &str) {
+fn start(
+    app: &AppHandle,
+    stage: &mut Stage,
+    binding_id: &str,
+    hotkey_string: &str,
+    received_at: Instant,
+    shared: &Arc<Mutex<DictationStateEvent>>,
+) {
+    publish_state(
+        app,
+        shared,
+        DictationStage::Starting,
+        Some(binding_id),
+        Some(received_at.elapsed()),
+    );
     let Some(action) = ACTION_MAP.get(binding_id) else {
         warn!("No action in ACTION_MAP for '{binding_id}'");
+        publish_state(app, shared, DictationStage::Idle, None, None);
         return;
     };
     action.start(app, binding_id, hotkey_string);
@@ -267,18 +386,39 @@ fn start(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &s
         .is_some_and(|a| a.is_recording())
     {
         *stage = Stage::Recording(binding_id.to_string());
+        publish_state(
+            app,
+            shared,
+            DictationStage::Recording,
+            Some(binding_id),
+            None,
+        );
     } else {
         debug!("Start for '{binding_id}' did not begin recording; staying idle");
+        publish_state(app, shared, DictationStage::Idle, None, None);
     }
 }
 
-fn stop(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &str) {
+fn stop(
+    app: &AppHandle,
+    stage: &mut Stage,
+    binding_id: &str,
+    hotkey_string: &str,
+    shared: &Arc<Mutex<DictationStateEvent>>,
+) {
     let Some(action) = ACTION_MAP.get(binding_id) else {
         warn!("No action in ACTION_MAP for '{binding_id}'");
         return;
     };
     action.stop(app, binding_id, hotkey_string);
     *stage = Stage::Processing;
+    publish_state(
+        app,
+        shared,
+        DictationStage::Processing,
+        Some(binding_id),
+        None,
+    );
 }
 
 #[cfg(test)]

@@ -624,7 +624,11 @@
     "modelLoadFailedUnknown": "अज्ञात मॉडल",
     "pasteFailedTitle": "टेक्स्ट पेस्ट नहीं हो सका",
     "pasteFailed": "खुले हुए ऐप्लिकेशन में टेक्स्ट पेस्ट नहीं किया जा सका.",
-    "transcriptionFailedTitle": "ट्रांसक्रिप्शन नहीं हो सका"
+    "transcriptionFailedTitle": "ट्रांसक्रिप्शन नहीं हो सका",
+    "selectedDeviceMissingTitle": "Selected Microphone Disconnected",
+    "selectedDeviceMissing": "Reconnect the selected microphone or choose another device in Settings.",
+    "recordingPersistenceFailedTitle": "Recording Could Not Be Saved",
+    "recordingPersistenceFailed": "FreeFlow can continue, but this recording will not be available for retry."
   },
   "appLanguage": {
     "title": "ऐप्लिकेशन की भाषा",

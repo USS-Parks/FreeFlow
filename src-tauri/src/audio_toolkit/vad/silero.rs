@@ -56,3 +56,20 @@ impl VoiceActivityDetector for SileroVad {
         self.engine.reset();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use sha2::{Digest, Sha256};
+
+    #[test]
+    fn bundled_v4_model_matches_the_provenance_manifest() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/models/silero_vad_v4.onnx");
+        let bytes = std::fs::read(path).expect("bundled Silero V4 model");
+        assert_eq!(bytes.len(), 1_807_522);
+        assert_eq!(
+            format!("{:x}", Sha256::digest(bytes)),
+            "a35ebf52fd3ce5f1469b2a36158dba761bc47b973ea3382b3186ca15b1f5af28"
+        );
+    }
+}
