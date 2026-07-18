@@ -345,7 +345,7 @@ The initiative is complete only when:
 | 2026-07-17 | 0.1 planning note | Added an upstream foundation evidence brief with current candidate SHAs and a preliminary Handy-first decision | None; FF-G2 remains pending and execution unauthorized |
 | 2026-07-17 | 0.2 | User authorized STS; FF-G1 began with public forum/case-study evidence and frozen P0/P1 fixtures | Execution authorized in roster order; clean-room policy remains binding |
 | 2026-07-17 | 0.2 execution | FF-G1 gate passed at `2624d411f4589974513854c16b4cfc0511d4d178`; 19 P0/P1 behaviors map to 19 original fixtures and nine forum sources are classified as unverified hypotheses | FF-G2 is now in progress |
-| 2026-07-17 | 0.3 execution | FF-G2 audited exact Handy/OpenWhispr SHAs on Windows, accepted Handy as the foundation, recorded build/license/vulnerability evidence and a reversible import in ADR-0001, installed Vulkan SDK 1.4.350.0, and verified a local Parakeet evaluation artifact | FF-G3 is next; the eight Handy RustSec findings and all upstream branding/network identities are mandatory first-patch scope |
+| 2026-07-17 | 0.3 execution | FF-G2 audited exact Handy/OpenWhispr SHAs on Windows, accepted Handy as the foundation, recorded build/license/vulnerability evidence and a reversible import in ADR-0001, installed Vulkan SDK 1.4.350.0, and verified a local Parakeet evaluation artifact; decision committed at `2ca3ac3aaa7158d2f1b29021254170bb26e59940` | FF-G3 is next; the eight Handy RustSec findings and all upstream branding/network identities are mandatory first-patch scope |
 
 ## 14. Public research basis
 
