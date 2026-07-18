@@ -68,9 +68,17 @@ both acknowledgements as Boolean inputs. Before the workflow reaches the
 default branch, a push scoped to `codex/ff-v1-model-install` can run it only when
 the repository variables `FREEFLOW_ACCEPT_NVIDIA_OPEN_MODEL_LICENSE` and
 `FREEFLOW_ACCEPT_CONVERSION_CC_BY_4_0` are both exactly `true`. Path filters
-avoid repeating the large transfer for unrelated changes. The workflow has not
-yet supplied live macOS evidence.
+avoid repeating the large transfer for unrelated changes.
 
-FF-V1 is not complete because equivalent macOS installation and live model-load
-evidence is not available in this Windows session. The next PSPR prompt must not
-start until that gate is satisfied or the user approves a documented re-scope.
+The first hosted run proved the complete Apple Silicon path. Its Intel job
+failed before executing FreeFlow code because `ort-sys 2.0.0-rc.12`, pulled by
+the imported ONNX/VAD graph, has no `x86_64-apple-darwin` prebuilt archive. The
+Parakeet live path uses transcribe.cpp rather than ORT. For this developer gate,
+the Intel matrix leg installs Homebrew's bottled ONNX Runtime and points
+`ort-sys` at its dynamic library; this satisfies the unrelated link dependency
+without changing the model path under test. Shipping or removing that imported
+runtime dependency remains packaging work and is not claimed complete here.
+
+FF-V1 is not complete because the corrected Intel macOS installation and live
+model-load result is pending. The next PSPR prompt must not start until that gate
+is satisfied or the user approves a documented re-scope.

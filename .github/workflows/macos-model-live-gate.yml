@@ -65,8 +65,10 @@ jobs:
         include:
           - runner: macos-15
             arch: arm64
+            install_onnxruntime: false
           - runner: macos-15-intel
             arch: x86_64
+            install_onnxruntime: true
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     steps:
@@ -76,6 +78,13 @@ jobs:
         env:
           EXPECTED_ARCH: ${{ matrix.arch }}
         run: test "$(uname -m)" = "$EXPECTED_ARCH"
+      - name: Supply Intel ONNX Runtime link dependency
+        if: matrix.install_onnxruntime
+        run: |
+          brew install onnxruntime
+          echo "ORT_LIB_LOCATION=$(brew --prefix onnxruntime)/lib" >> "$GITHUB_ENV"
+          echo "ORT_PREFER_DYNAMIC_LINK=1" >> "$GITHUB_ENV"
+          echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib" >> "$GITHUB_ENV"
       - name: Download, verify, install, and load pinned Parakeet model
         env:
           FREEFLOW_MODEL_LICENSE_ACCEPTANCE: I_ACCEPT_NVIDIA_OML_AND_CC_BY_4_0
