@@ -63,6 +63,19 @@ pub const HISTORY_MIGRATIONS: &[ReversibleMigration] = &[
             ALTER TABLE transcription_history DROP COLUMN model_id;
             ALTER TABLE transcription_history DROP COLUMN raw_transcript;",
     },
+    ReversibleMigration {
+        version: 6,
+        up_sql: "ALTER TABLE transcription_history ADD COLUMN application_id TEXT;
+            ALTER TABLE transcription_history ADD COLUMN window_title TEXT;
+            CREATE INDEX transcription_history_timestamp_idx
+                ON transcription_history(timestamp DESC);
+            CREATE INDEX transcription_history_status_idx
+                ON transcription_history(transcription_status);",
+        down_sql: "DROP INDEX IF EXISTS transcription_history_status_idx;
+            DROP INDEX IF EXISTS transcription_history_timestamp_idx;
+            ALTER TABLE transcription_history DROP COLUMN window_title;
+            ALTER TABLE transcription_history DROP COLUMN application_id;",
+    },
 ];
 
 pub struct MigrationRunner<'a> {
@@ -159,7 +172,7 @@ mod tests {
         runner
             .migrate_to_latest(&mut conn)
             .expect("migrate forward");
-        assert_eq!(MigrationRunner::current_version(&conn).expect("version"), 5);
+        assert_eq!(MigrationRunner::current_version(&conn).expect("version"), 6);
         conn.execute(
             "INSERT INTO transcription_history (
                 file_name, timestamp, saved, title, transcription_text,
@@ -246,7 +259,7 @@ mod tests {
             .expect("idempotent restart migration");
         assert_eq!(
             MigrationRunner::current_version(&reopened).expect("version"),
-            5
+            6
         );
         let text: String = reopened
             .query_row(

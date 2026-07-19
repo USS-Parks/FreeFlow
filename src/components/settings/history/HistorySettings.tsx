@@ -1,6 +1,15 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Check, Copy, FolderOpen, RotateCcw, Star, Trash2 } from "lucide-react";
+import {
+  Ban,
+  Check,
+  Copy,
+  FolderOpen,
+  Search,
+  RotateCcw,
+  Star,
+  Trash2,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -10,6 +19,7 @@ import {
   type HistoryUpdatePayload,
 } from "@/bindings";
 import { useOsType } from "@/hooks/useOsType";
+import { useSettings } from "@/hooks/useSettings";
 import { formatDateTime } from "@/utils/dateFormat";
 import { AudioPlayer, AudioPlayerGroup } from "../../ui/AudioPlayer";
 import { Button } from "../../ui/Button";
@@ -61,44 +71,60 @@ const OpenRecordingsButton: React.FC<OpenRecordingsButtonProps> = ({
 export const HistorySettings: React.FC = () => {
   const { t } = useTranslation();
   const osType = useOsType();
+  const { getSetting, updateSetting, isUpdating } = useSettings();
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const entriesRef = useRef<HistoryEntry[]>([]);
   const loadingRef = useRef(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [deferredQuery, setDeferredQuery] = useState("");
+  const storageMode = getSetting("history_storage_mode") ?? "store";
+
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => setDeferredQuery(searchQuery.trim()),
+      250,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [searchQuery]);
 
   // Keep ref in sync for use in IntersectionObserver callback
   useEffect(() => {
     entriesRef.current = entries;
   }, [entries]);
 
-  const loadPage = useCallback(async (cursor?: number) => {
-    const isFirstPage = cursor === undefined;
-    if (!isFirstPage && loadingRef.current) return;
-    loadingRef.current = true;
+  const loadPage = useCallback(
+    async (cursor?: number) => {
+      const isFirstPage = cursor === undefined;
+      if (!isFirstPage && loadingRef.current) return;
+      loadingRef.current = true;
 
-    if (isFirstPage) setLoading(true);
+      if (isFirstPage) setLoading(true);
 
-    try {
-      const result = await commands.getHistoryEntries(
-        cursor ?? null,
-        PAGE_SIZE,
-      );
-      if (result.status === "ok") {
-        const { entries: newEntries, has_more } = result.data;
-        setEntries((prev) =>
-          isFirstPage ? newEntries : [...prev, ...newEntries],
+      try {
+        const result = await commands.getHistoryEntries(
+          cursor ?? null,
+          PAGE_SIZE,
+          deferredQuery || null,
         );
-        setHasMore(has_more);
+        if (result.status === "ok") {
+          const { entries: newEntries, has_more } = result.data;
+          setEntries((prev) =>
+            isFirstPage ? newEntries : [...prev, ...newEntries],
+          );
+          setHasMore(has_more);
+        }
+      } catch (error) {
+        console.error("Failed to load history entries:", error);
+      } finally {
+        setLoading(false);
+        loadingRef.current = false;
       }
-    } catch (error) {
-      console.error("Failed to load history entries:", error);
-    } finally {
-      setLoading(false);
-      loadingRef.current = false;
-    }
-  }, []);
+    },
+    [deferredQuery],
+  );
 
   // Initial load
   useEffect(() => {
@@ -134,20 +160,23 @@ export const HistorySettings: React.FC = () => {
     const unlisten = events.historyUpdatePayload.listen((event) => {
       const payload: HistoryUpdatePayload = event.payload;
       if (payload.action === "added") {
-        setEntries((prev) => [payload.entry, ...prev]);
+        if (!deferredQuery) {
+          setEntries((prev) => [payload.entry, ...prev]);
+        }
       } else if (payload.action === "updated") {
         setEntries((prev) =>
           prev.map((e) => (e.id === payload.entry.id ? payload.entry : e)),
         );
-      }
-      // "deleted" and "toggled" are handled by optimistic updates only,
-      // so we intentionally ignore them here to avoid double-mutation.
+      } else if (payload.action === "deleted") {
+        setEntries((prev) => prev.filter((entry) => entry.id !== payload.id));
+      } else if (payload.action === "cleared") setEntries([]);
+      // "toggled" is handled by the optimistic save update.
     });
 
     return () => {
       unlisten.then((fn) => fn());
     };
-  }, []);
+  }, [deferredQuery]);
 
   const toggleSaved = async (id: number) => {
     // Optimistic update
@@ -218,6 +247,27 @@ export const HistorySettings: React.FC = () => {
       console.error("Failed to delete entry:", error);
       loadPage();
     }
+  };
+
+  const clearHistory = async () => {
+    if (!window.confirm(t("settings.history.clearConfirm"))) return;
+    const result = await commands.clearHistory();
+    if (result.status !== "ok") {
+      toast.error(t("settings.history.clearError"));
+      return;
+    }
+    setEntries([]);
+    setHasMore(false);
+    toast.success(
+      t("settings.history.cleared", { count: Number(result.data) }),
+    );
+  };
+
+  const toggleNeverStore = async () => {
+    await updateSetting(
+      "history_storage_mode",
+      storageMode === "never_store" ? "store" : "never_store",
+    );
   };
 
   const retryHistoryEntry = async (id: number) => {
@@ -296,6 +346,42 @@ export const HistorySettings: React.FC = () => {
             label={t("settings.history.openFolder")}
           />
         </div>
+        <div className="px-4 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <label className="relative block">
+            <Search
+              aria-hidden="true"
+              className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text/40"
+            />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder={t("settings.history.searchPlaceholder")}
+              aria-label={t("settings.history.searchLabel")}
+              className="w-full rounded-md border border-mid-gray/30 bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-logo-primary"
+            />
+          </label>
+          <Button
+            onClick={toggleNeverStore}
+            variant={storageMode === "never_store" ? "primary" : "secondary"}
+            size="sm"
+            disabled={isUpdating("history_storage_mode")}
+            className="flex items-center gap-2"
+          >
+            <Ban className="h-4 w-4" />
+            {storageMode === "never_store"
+              ? t("settings.history.neverStoreEnabled")
+              : t("settings.history.neverStore")}
+          </Button>
+          <Button onClick={clearHistory} variant="secondary" size="sm">
+            {t("settings.history.clearAll")}
+          </Button>
+        </div>
+        <p className="px-4 text-xs text-text/50">
+          {storageMode === "never_store"
+            ? t("settings.history.neverStoreDescription")
+            : t("settings.history.storageDescription")}
+        </p>
         <div className="bg-background border border-mid-gray/20 rounded-lg overflow-visible">
           {content}
         </div>
@@ -349,6 +435,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   };
 
   const handleDeleteEntry = async () => {
+    if (!window.confirm(t("settings.history.deleteConfirm"))) return;
     try {
       await deleteAudio(entry.id);
     } catch (error) {
@@ -370,6 +457,25 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   };
 
   const formattedDate = formatDateTime(String(entry.timestamp), i18n.language);
+  const latency = entry.transcription_ms
+    ? t("settings.history.latency", {
+        seconds: (entry.transcription_ms / 1000).toFixed(2),
+      })
+    : null;
+  const audioDuration = entry.audio_duration_ms
+    ? t("settings.history.duration", {
+        seconds: (entry.audio_duration_ms / 1000).toFixed(1),
+      })
+    : null;
+  const speed =
+    entry.audio_duration_ms && entry.audio_duration_ms > 0 && hasTranscription
+      ? t("settings.history.wordsPerMinute", {
+          value: Math.round(
+            displayedText.trim().split(/\s+/).length /
+              (entry.audio_duration_ms / 60_000),
+          ),
+        })
+      : null;
 
   return (
     <div className="px-4 py-2 pb-5 flex flex-col gap-3">
@@ -427,6 +533,19 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
           </IconButton>
         </div>
       </div>
+
+      {(entry.application_id ||
+        entry.window_title ||
+        latency ||
+        audioDuration) && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-text/50">
+          {entry.application_id && <span>{entry.application_id}</span>}
+          {entry.window_title && <span>{entry.window_title}</span>}
+          {audioDuration && <span>{audioDuration}</span>}
+          {latency && <span>{latency}</span>}
+          {speed && <span>{speed}</span>}
+        </div>
+      )}
 
       <p
         className={`italic text-sm pb-2 ${

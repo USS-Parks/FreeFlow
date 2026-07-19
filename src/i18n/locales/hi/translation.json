@@ -493,7 +493,21 @@
       "retranscribeError": "फिर से ट्रांसक्राइब नहीं किया जा सका. कृपया फिर से कोशिश करें.",
       "transcribing": "ट्रांसक्राइब हो रहा है...",
       "transcriptionFailed": "ट्रांसक्रिप्शन नहीं हो सका. आप रीट्राई आइकन से फिर से ट्रांसक्राइब कर सकते हैं.",
-      "rawTranscript": "Raw engine transcript"
+      "rawTranscript": "Raw engine transcript",
+      "searchPlaceholder": "Search text, app, window, or model...",
+      "searchLabel": "Search transcription history",
+      "clearAll": "Clear all",
+      "clearConfirm": "Permanently delete every history entry and recording? This cannot be undone.",
+      "clearError": "History could not be cleared.",
+      "cleared": "Deleted {{count}} history entries.",
+      "neverStore": "Never store",
+      "neverStoreEnabled": "Never store on",
+      "neverStoreDescription": "New recordings and transcripts are removed as soon as transcription finishes or fails.",
+      "storageDescription": "Audio, raw text, final text, and app metadata are stored locally according to the retention setting.",
+      "deleteConfirm": "Permanently delete this history entry and its recording? This cannot be undone.",
+      "latency": "Transcribed in {{seconds}}s",
+      "duration": "{{seconds}}s audio",
+      "wordsPerMinute": "{{value}} wpm"
     },
     "debug": {
       "title": "डिबग",

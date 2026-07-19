@@ -790,12 +790,13 @@ impl ShortcutAction for TranscribeAction {
                     };
 
                     let pending_entry = if wav_saved {
-                        match hm.save_entry(
+                        match hm.save_entry_with_context(
                             file_name.clone(),
                             String::new(),
                             post_process,
                             None,
                             None,
+                            captured_target.as_ref(),
                         ) {
                             Ok(entry) => Some(entry),
                             Err(error) => {
@@ -913,14 +914,27 @@ impl ShortcutAction for TranscribeAction {
                                 return;
                             }
 
+                            let never_store = crate::settings::get_history_storage_mode(&ah)
+                                == crate::settings::HistoryStorageMode::NeverStore;
                             if let Some(entry) = &pending_entry {
-                                if let Err(err) = hm.complete_transcription(
-                                    entry.id,
-                                    &outcome,
-                                    processed.post_processed_text.clone(),
-                                    processed.post_process_prompt.clone(),
-                                ) {
-                                    error!("Failed to complete retryable history entry: {}", err);
+                                let result = if never_store {
+                                    hm.delete_entry(entry.id).await.map(|()| None)
+                                } else {
+                                    hm.complete_transcription(
+                                        entry.id,
+                                        &outcome,
+                                        processed.post_processed_text.clone(),
+                                        processed.post_process_prompt.clone(),
+                                    )
+                                    .map(Some)
+                                };
+                                if let Err(err) = result {
+                                    error!("Failed to finalize retryable history entry: {}", err);
+                                }
+                            }
+                            if never_store && pending_entry.is_none() {
+                                if let Err(err) = hm.delete_untracked_recording(&file_name) {
+                                    error!("Failed to remove never-store recording: {}", err);
                                 }
                             }
                             TranscriptionProgressEvent::publish(
@@ -1012,12 +1026,28 @@ impl ShortcutAction for TranscribeAction {
                                 100,
                                 Some(err.to_string()),
                             );
+                            let never_store = crate::settings::get_history_storage_mode(&ah)
+                                == crate::settings::HistoryStorageMode::NeverStore;
                             if let Some(entry) = &pending_entry {
-                                if let Err(history_error) =
+                                let history_result = if never_store {
+                                    hm.delete_entry(entry.id).await.map(|()| None)
+                                } else {
                                     hm.mark_transcription_failed(entry.id, &err.to_string())
-                                {
+                                        .map(Some)
+                                };
+                                if let Err(history_error) = history_result {
                                     error!(
                                         "Failed to retain transcription error for retry: {}",
+                                        history_error
+                                    );
+                                }
+                            }
+                            if never_store && pending_entry.is_none() {
+                                if let Err(history_error) =
+                                    hm.delete_untracked_recording(&file_name)
+                                {
+                                    error!(
+                                        "Failed to remove never-store recording: {}",
                                         history_error
                                     );
                                 }

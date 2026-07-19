@@ -239,6 +239,37 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   uninstall-data matrix remains mandatory at FF-R2 under the approved
   consolidation; no public-release claim is made by this candidate.
 
+### 2026-07-19 — FF-P1 candidate
+
+- Objective: deliver searchable local transcription history, complete metadata
+  and statistics, durable recovery, explicit retention, fail-closed deletion,
+  clear-all, and never-store behavior.
+- Starting commit: `92caaef445fc56269a1f9f18dbaf60c54b7a6673` on canonical
+  `main`.
+- Reuse classification: extension at the existing SQLite history manager,
+  atomic WAV recovery, typed Tauri command/binding, settings, tray paste-last,
+  and i18next seams; no new runtime dependency.
+- Files changed: history schema migration and manager; transcription completion
+  and retry lifecycle; settings and typed commands/bindings; history UI; 23
+  locale catalogs; behavior matrix; frozen FF-P1 evidence.
+- Verification commands: verified Bun 1.3.14 frozen install; ESLint and service
+  boundary; Prettier and Rustfmt; 460-key translation consistency; TypeScript
+  and production Vite build; full `cargo test`; warnings-denied Clippy with only
+  the seven inherited lint classes allowed; optimized Tauri no-bundle build;
+  RustSec; provenance; diff checks.
+- Automated evidence: 173/173 runnable Rust tests pass with the two explicit
+  731 MB live-model tests ignored. Focused retention, irreversible deletion,
+  path validation, metadata search, migrations/restart, and atomic WAV recovery
+  tests pass. RustSec reports no denied vulnerability and 28 allowed upstream
+  warnings. All catalogs are structurally complete.
+- Artifact: 44,207,104-byte `freeflow.exe`, SHA-256
+  `7806dc5077326d18deb9a502e143e8cace2f4f153764520ae233c97582195c3e`.
+- Result: local FF-P1 candidate gates pass; hosted native Windows/macOS,
+  provenance, and security jobs are pending at the candidate commit.
+- Commit SHA: recorded by the implementation commit containing this entry.
+- Deviations or remaining work: none in FF-P1 implementation scope. The
+  retained cross-platform interactive release matrices remain owned by FF-R2.
+
 ## Entry template
 
 ### YYYY-MM-DD — FF-XX

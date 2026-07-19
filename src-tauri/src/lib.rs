@@ -1013,9 +1013,11 @@ pub fn run(cli_args: CliArgs) {
             commands::history::get_audio_file_path,
             commands::history::read_audio_file,
             commands::history::delete_history_entry,
+            commands::history::clear_history,
             commands::history::retry_history_entry_transcription,
             commands::history::update_history_limit,
             commands::history::update_recording_retention_period,
+            commands::history::update_history_storage_mode,
             helpers::clamshell::is_laptop,
         ])
         .events(collect_events![

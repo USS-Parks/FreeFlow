@@ -493,7 +493,21 @@
       "retranscribeError": "다시 전사에 실패했습니다. 다시 시도해주세요.",
       "transcribing": "전사 중...",
       "transcriptionFailed": "전사에 실패했습니다. 재시도 아이콘을 사용하여 다시 전사할 수 있습니다.",
-      "rawTranscript": "Raw engine transcript"
+      "rawTranscript": "Raw engine transcript",
+      "searchPlaceholder": "Search text, app, window, or model...",
+      "searchLabel": "Search transcription history",
+      "clearAll": "Clear all",
+      "clearConfirm": "Permanently delete every history entry and recording? This cannot be undone.",
+      "clearError": "History could not be cleared.",
+      "cleared": "Deleted {{count}} history entries.",
+      "neverStore": "Never store",
+      "neverStoreEnabled": "Never store on",
+      "neverStoreDescription": "New recordings and transcripts are removed as soon as transcription finishes or fails.",
+      "storageDescription": "Audio, raw text, final text, and app metadata are stored locally according to the retention setting.",
+      "deleteConfirm": "Permanently delete this history entry and its recording? This cannot be undone.",
+      "latency": "Transcribed in {{seconds}}s",
+      "duration": "{{seconds}}s audio",
+      "wordsPerMinute": "{{value}} wpm"
     },
     "debug": {
       "title": "디버그",

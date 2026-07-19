@@ -1226,11 +1226,16 @@ export const commands = {
   async getHistoryEntries(
     cursor: number | null,
     limit: number | null,
+    query: string | null,
   ): Promise<Result<PaginatedHistory, string>> {
     try {
       return {
         status: "ok",
-        data: await TAURI_INVOKE("get_history_entries", { cursor, limit }),
+        data: await TAURI_INVOKE("get_history_entries", {
+          cursor,
+          limit,
+          query,
+        }),
       };
     } catch (e) {
       if (e instanceof Error) throw e;
@@ -1281,6 +1286,17 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async clearHistory(): Promise<Result<number, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("clear_history"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async retryHistoryEntryTranscription(
     id: number,
   ): Promise<Result<null, string>> {
@@ -1314,6 +1330,19 @@ export const commands = {
         data: await TAURI_INVOKE("update_recording_retention_period", {
           period,
         }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async updateHistoryStorageMode(
+    mode: HistoryStorageMode,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("update_history_storage_mode", { mode }),
       };
     } catch (e) {
       if (e instanceof Error) throw e;
@@ -1405,6 +1434,7 @@ export type AppSettings = {
   word_correction_threshold?: number;
   history_limit?: number;
   recording_retention_period?: RecordingRetentionPeriod;
+  history_storage_mode?: HistoryStorageMode;
   paste_method?: PasteMethod;
   clipboard_handling?: ClipboardHandling;
   auto_submit?: boolean;
@@ -1505,12 +1535,16 @@ export type HistoryEntry = {
   transcription_ms: number | null;
   transcription_status: string;
   transcription_error: string | null;
+  application_id: string | null;
+  window_title: string | null;
 };
 export type HistoryUpdatePayload =
   | { action: "added"; entry: HistoryEntry }
   | { action: "updated"; entry: HistoryEntry }
   | { action: "deleted"; id: number }
+  | { action: "cleared" }
   | { action: "toggled"; id: number };
+export type HistoryStorageMode = "store" | "never_store";
 /**
  * Result of changing keyboard implementation
  */

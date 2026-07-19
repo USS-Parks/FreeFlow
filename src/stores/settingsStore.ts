@@ -109,6 +109,8 @@ const settingUpdaters: {
     ),
   recording_retention_period: (value) =>
     commands.updateRecordingRetentionPeriod(value as string),
+  history_storage_mode: (value) =>
+    commands.updateHistoryStorageMode(value as "store" | "never_store"),
   translate_to_english: (value) =>
     commands.changeTranslateToEnglishSetting(value as boolean),
   selected_language: (value) =>

@@ -187,6 +187,14 @@ pub enum RecordingRetentionPeriod {
     Months3,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum HistoryStorageMode {
+    #[default]
+    Store,
+    NeverStore,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum KeyboardImplementation {
@@ -423,6 +431,8 @@ pub struct AppSettings {
     pub history_limit: usize,
     #[serde(default = "default_recording_retention_period")]
     pub recording_retention_period: RecordingRetentionPeriod,
+    #[serde(default)]
+    pub history_storage_mode: HistoryStorageMode,
     #[serde(default)]
     pub paste_method: PasteMethod,
     #[serde(default)]
@@ -898,6 +908,7 @@ pub fn get_default_settings() -> AppSettings {
         word_correction_threshold: default_word_correction_threshold(),
         history_limit: default_history_limit(),
         recording_retention_period: default_recording_retention_period(),
+        history_storage_mode: HistoryStorageMode::default(),
         paste_method: PasteMethod::default(),
         clipboard_handling: ClipboardHandling::default(),
         auto_submit: default_auto_submit(),
@@ -1193,6 +1204,10 @@ pub fn get_history_limit(app: &AppHandle) -> usize {
 pub fn get_recording_retention_period(app: &AppHandle) -> RecordingRetentionPeriod {
     let settings = get_settings(app);
     settings.recording_retention_period
+}
+
+pub fn get_history_storage_mode(app: &AppHandle) -> HistoryStorageMode {
+    get_settings(app).history_storage_mode
 }
 
 #[cfg(test)]

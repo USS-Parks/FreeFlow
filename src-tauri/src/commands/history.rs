@@ -13,9 +13,10 @@ pub async fn get_history_entries(
     history_manager: State<'_, Arc<HistoryManager>>,
     cursor: Option<i64>,
     limit: Option<usize>,
+    query: Option<String>,
 ) -> Result<PaginatedHistory, String> {
     history_manager
-        .get_history_entries(cursor, limit)
+        .get_history_entries(cursor, limit, query)
         .await
         .map_err(|e| e.to_string())
 }
@@ -76,12 +77,26 @@ pub async fn delete_history_entry(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn clear_history(
+    _app: AppHandle,
+    history_manager: State<'_, Arc<HistoryManager>>,
+) -> Result<usize, String> {
+    history_manager
+        .clear_history()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn retry_history_entry_transcription(
     app: AppHandle,
     history_manager: State<'_, Arc<HistoryManager>>,
     transcription_manager: State<'_, Arc<TranscriptionManager>>,
     id: i64,
 ) -> Result<(), String> {
+    let never_store = crate::settings::get_history_storage_mode(&app)
+        == crate::settings::HistoryStorageMode::NeverStore;
     let entry = history_manager
         .get_entry_by_id(id)
         .await
@@ -95,6 +110,12 @@ pub async fn retry_history_entry_transcription(
         .map_err(|e| format!("Failed to load audio: {}", e))?;
 
     if samples.is_empty() {
+        if never_store {
+            history_manager
+                .delete_entry(id)
+                .await
+                .map_err(|error| error.to_string())?;
+        }
         return Err("Recording has no audio samples".to_string());
     }
 
@@ -110,10 +131,19 @@ pub async fn retry_history_entry_transcription(
     let tm = Arc::clone(&transcription_manager);
     let outcome = tauri::async_runtime::spawn_blocking(move || tm.transcribe_detailed(samples))
         .await
-        .map_err(|e| format!("Transcription task panicked: {}", e))?
-        .map_err(|e| {
-            let message = e.to_string();
-            let _ = history_manager.mark_transcription_failed(id, &message);
+        .map_err(|e| format!("Transcription task panicked: {}", e))?;
+    let outcome = match outcome {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            let message = error.to_string();
+            if never_store {
+                history_manager
+                    .delete_entry(id)
+                    .await
+                    .map_err(|delete_error| delete_error.to_string())?;
+            } else {
+                let _ = history_manager.mark_transcription_failed(id, &message);
+            }
             TranscriptionProgressEvent::publish(
                 &app,
                 Some(id),
@@ -121,11 +151,19 @@ pub async fn retry_history_entry_transcription(
                 100,
                 Some(message.clone()),
             );
-            message
-        })?;
+            return Err(message);
+        }
+    };
 
     if outcome.text.is_empty() {
-        let _ = history_manager.mark_transcription_failed(id, "Recording contains no speech");
+        if never_store {
+            history_manager
+                .delete_entry(id)
+                .await
+                .map_err(|error| error.to_string())?;
+        } else {
+            let _ = history_manager.mark_transcription_failed(id, "Recording contains no speech");
+        }
         TranscriptionProgressEvent::publish(
             &app,
             Some(id),
@@ -147,14 +185,21 @@ pub async fn retry_history_entry_transcription(
     }
     let processed =
         process_transcription_output(&app, &outcome.text, entry.post_process_requested).await;
-    history_manager
-        .complete_transcription(
-            id,
-            &outcome,
-            processed.post_processed_text,
-            processed.post_process_prompt,
-        )
-        .map_err(|e| e.to_string())?;
+    if never_store {
+        history_manager
+            .delete_entry(id)
+            .await
+            .map_err(|e| e.to_string())?;
+    } else {
+        history_manager
+            .complete_transcription(
+                id,
+                &outcome,
+                processed.post_processed_text,
+                processed.post_process_prompt,
+            )
+            .map_err(|e| e.to_string())?;
+    }
     TranscriptionProgressEvent::publish(
         &app,
         Some(id),
@@ -209,5 +254,17 @@ pub async fn update_recording_retention_period(
         .cleanup_old_entries()
         .map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn update_history_storage_mode(
+    app: AppHandle,
+    mode: crate::settings::HistoryStorageMode,
+) -> Result<(), String> {
+    let mut settings = crate::settings::get_settings(&app);
+    settings.history_storage_mode = mode;
+    crate::settings::write_settings(&app, settings);
     Ok(())
 }

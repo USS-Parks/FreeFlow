@@ -468,6 +468,8 @@ mod tests {
             transcription_ms: None,
             transcription_status: "completed".to_string(),
             transcription_error: None,
+            application_id: None,
+            window_title: None,
         }
     }
 
