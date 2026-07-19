@@ -19,7 +19,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-19 | FF-V5    | Complete    | Original status bar states/docking/accessibility, state-bearing tray controls, Hub keyboard navigation, 23 catalogs, retained live matrix                                                       | Frozen install; frontend/translation/build gates; 162 Rust tests; strict Clippy delta; no-bundle build; RustSec/provenance; hosted run `29680441253`                                                                                                                                    | `b02751dc4e0edb06ec0827dfc3fbcdb24e2d7d6d`; closeout `26fc961e23e97e5d358b21f619d4464c37cf02f7`                                                                                                                            | Retained live multi-monitor/scaling/full-screen/focus/drag/screen-reader matrix assigned to FF-R2                                                                                               |
 | 2026-07-19 | FF-V6    | Complete    | Resumable onboarding, privacy promise, permission repair, model/completion separation, shortcut/autostart preferences, first-dictation proof, diagnostics, uninstall-data guidance, 23 catalogs | Frozen install; frontend/446-key translation/build gates; 168 Rust tests; strict Clippy delta; no-bundle release build; RustSec/provenance; hosted run `29690161596` passed                                                                                                             | `bcea051e8f3435eb927502d83fb2c14f7c6b091c`                                                                                                                                                                                 | Retained signed-build live install/permissions/restart/upgrade/uninstall matrix assigned to FF-R2                                                                                               |
 | 2026-07-19 | FF-P4    | Complete    | Deterministic multilingual formatting/backtrack, effective-language filler policy, raw/final separation, confirmed utterance-final submit, 23 catalogs, strict-Clippy baseline cleanup          | Frozen install; frontend/502-key translation/build gates; 195 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance; hosted run `29698366361` passed                                                                                           | `f1d66200f1b345a8a82157bd78965d84044dac2c`                                                                                                                                                                                 | Retained interactive Windows/macOS submit matrix remains assigned to FF-R2                                                                                                                      |
-| 2026-07-19 | FF-P5    | Candidate   | Local process classification, typed per-category boundary/context profiles, fail-closed minimum context, denylist, redacted diagnostics, 23 catalogs                                            | Frozen install; frontend/537-key translation/build gates; 201 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance passed; hosted gate pending                                                                                                | Pending                                                                                                                                                                                                                    | Windows artifact 44,581,888 bytes, SHA-256 `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`                                                                                   |
+| 2026-07-19 | FF-P5    | Complete    | Local process classification, typed per-category boundary/context profiles, fail-closed minimum context, denylist, redacted diagnostics, 23 catalogs                                            | Frozen install; frontend/537-key translation/build gates; 201 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance; hosted run `29700140823` passed                                                                                           | `44c9ac6b8371440e20aa440542396022dbbeb3e0`                                                                                                                                                                                 | Windows artifact 44,581,888 bytes, SHA-256 `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`                                                                                   |
 
 ### 2026-07-18 — FF-G3
 
@@ -373,7 +373,7 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   mandatory at FF-R2 under the approved consolidation; no public-release claim
   is made by this candidate.
 
-### 2026-07-19 — FF-P5 (candidate)
+### 2026-07-19 — FF-P5 (complete)
 
 - Objective: classify foreground applications locally and deliver explicit,
   per-category formatting/context profiles, minimum-necessary surrounding-text
@@ -398,8 +398,11 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   and 28 policy-allowed upstream warnings. All catalogs are complete.
 - Artifact: 44,581,888-byte `freeflow.exe`, SHA-256
   `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`.
-- Result: native gate passed; candidate SHA and hosted evidence pending.
-- Commit SHA: pending.
+- Hosted evidence: run `29700140823` passed native Windows and macOS
+  foundation jobs, provenance, and security at exact candidate commit
+  `44c9ac6b8371440e20aa440542396022dbbeb3e0`.
+- Result: FF-P5 and Milestone P implementation are complete; FF-A1 is next.
+- Commit SHA: `44c9ac6b8371440e20aa440542396022dbbeb3e0`.
 - Deviations or remaining work: the retained interactive Windows/macOS
   application-context matrix remains mandatory at FF-R2 under the approved
   consolidation; no public-release claim is made by this candidate.

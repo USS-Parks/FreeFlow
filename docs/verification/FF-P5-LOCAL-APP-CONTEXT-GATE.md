@@ -69,5 +69,11 @@ policy-allowed upstream warnings.
 The optimized Windows executable is 44,581,888 bytes with SHA-256
 `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`.
 
-Hosted Windows/macOS CI evidence is recorded after publication of the immutable
-candidate SHA.
+Hosted CI run
+[`29700140823`](https://github.com/USS-Parks/FreeFlow/actions/runs/29700140823)
+passed native Windows and macOS foundation jobs, provenance, and security at
+exact candidate commit `44c9ac6b8371440e20aa440542396022dbbeb3e0`.
+
+The retained interactive Windows/macOS application-context matrix remains
+mandatory at FF-R2 under the PSPR's 2026-07-19 consolidation. This is the
+deterministic/native implementation gate, not a public-release claim.
