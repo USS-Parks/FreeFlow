@@ -304,7 +304,7 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Deviations or remaining work: none in FF-P2 implementation scope. The
   retained cross-platform interactive release matrices remain owned by FF-R2.
 
-### 2026-07-19 — FF-P3 (candidate)
+### 2026-07-19 — FF-P3 (complete)
 
 - Objective: deliver deterministic voice-triggered static expansions with
   durable CRUD, search/sort, JSON transfer, conflict prevention, and exact
@@ -330,10 +330,10 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   vulnerability and 28 allowed upstream warnings. All catalogs are complete.
 - Artifact: 44,445,696-byte `freeflow.exe`, SHA-256
   `34fa26e8bc387dd9319b2bbf12857678d0fb0df1ba9265e065de0086a0a4bf24`.
-- Hosted evidence: pending at the exact candidate commit.
-- Result: local FF-P3 implementation and gates pass; hosted candidate evidence
-  is the remaining closeout step.
-- Commit SHA: pending candidate commit.
+- Hosted evidence: run `29696619451` passed native Windows and macOS foundation
+  jobs, provenance, and security at the exact candidate commit.
+- Result: FF-P3 is complete and FF-P4 is next.
+- Commit SHA: `e753b1527485756ae7424b337e4bacbf03d47955`.
 - Deviations or remaining work: none in FF-P3 implementation scope. The
   retained cross-platform interactive release matrices remain owned by FF-R2.
 

@@ -64,5 +64,7 @@ vulnerability and 28 allowed upstream warnings.
 
 The optimized Windows executable is 44,445,696 bytes with SHA-256
 `34fa26e8bc387dd9319b2bbf12857678d0fb0df1ba9265e065de0086a0a4bf24`.
-Hosted native Windows/macOS, provenance, and security evidence will be attached
-at the exact candidate commit before FF-P3 is closed.
+Hosted CI run
+[`29696619451`](https://github.com/USS-Parks/FreeFlow/actions/runs/29696619451)
+passed native Windows and macOS foundation jobs, provenance, and security at
+exact candidate commit `e753b1527485756ae7424b337e4bacbf03d47955`.
