@@ -433,7 +433,7 @@ pub fn paste_last_transcript(app: &AppHandle) {
     }
 
     let target = crate::platform_context::capture_active_target();
-    match crate::clipboard::paste(text.to_string(), app.clone(), Some(target)) {
+    match crate::clipboard::paste(text.to_string(), app.clone(), Some(target), false) {
         Ok(outcome) if outcome.inserted => info!("Pasted last transcript via tray."),
         Ok(outcome) => warn!(
             "Paste-last deferred to manual recovery: {}",

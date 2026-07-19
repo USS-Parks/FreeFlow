@@ -440,6 +440,8 @@ pub struct AppSettings {
     #[serde(default = "default_auto_submit")]
     pub auto_submit: bool,
     #[serde(default)]
+    pub auto_submit_confirmed: bool,
+    #[serde(default)]
     pub auto_submit_key: AutoSubmitKey,
     #[serde(default = "default_post_process_enabled")]
     pub post_process_enabled: bool,
@@ -502,7 +504,7 @@ fn default_model() -> String {
     "".to_string()
 }
 
-const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 1;
+const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 2;
 
 fn default_settings_schema_version() -> u32 {
     CURRENT_SETTINGS_SCHEMA_VERSION
@@ -912,6 +914,7 @@ pub fn get_default_settings() -> AppSettings {
         paste_method: PasteMethod::default(),
         clipboard_handling: ClipboardHandling::default(),
         auto_submit: default_auto_submit(),
+        auto_submit_confirmed: false,
         auto_submit_key: AutoSubmitKey::default(),
         post_process_enabled: default_post_process_enabled(),
         post_process_provider_id: default_post_process_provider_id(),
@@ -1127,6 +1130,15 @@ fn apply_settings_migrations(
         updated = true;
     }
 
+    // Auto-submit used to send a key after every dictation without a spoken
+    // command or first-use acknowledgement. Upgrades fail closed until the user
+    // explicitly confirms the new end-of-utterance "press enter" behavior.
+    if settings_value.get("auto_submit_confirmed").is_none() {
+        settings.auto_submit = false;
+        settings.auto_submit_confirmed = false;
+        updated = true;
+    }
+
     let stored_schema_version = settings_value
         .get("settings_schema_version")
         .and_then(|v| v.as_u64())
@@ -1232,7 +1244,7 @@ mod tests {
 
     /// Frozen snapshot of a real v0.9.0-era settings store, as written to
     /// disk. This pins backwards compatibility: it must always parse strictly
-    /// (no salvage) and require no migration rewrite.
+    /// (no salvage) and converge through explicit migrations.
     ///
     /// If a schema change breaks this test, do NOT just update the fixture —
     /// it stands in for the stores on users' machines. Add a
@@ -1240,7 +1252,7 @@ mod tests {
     /// `apply_settings_migrations` so old values keep loading, and only extend
     /// the fixture alongside that.
     #[test]
-    fn frozen_v0_9_store_parses_strictly_without_migration() {
+    fn frozen_v0_9_store_parses_strictly_and_migrates_safely() {
         // Note "log_level": 2 — the legacy numeric format, kept deliberately.
         let stored: serde_json::Value = serde_json::from_str(
             r##"{
@@ -1345,8 +1357,13 @@ mod tests {
         assert_eq!(settings.log_level, LogLevel::Debug);
         assert_eq!(settings.sound_theme, SoundTheme::Pop);
 
-        // A current-format store must not be rewritten on every read.
-        assert!(!apply_settings_migrations(&mut settings, &stored));
+        assert!(apply_settings_migrations(&mut settings, &stored));
+        assert!(!settings.auto_submit);
+        assert!(!settings.auto_submit_confirmed);
+        assert_eq!(
+            settings.settings_schema_version,
+            CURRENT_SETTINGS_SCHEMA_VERSION
+        );
     }
 
     #[test]
@@ -1448,7 +1465,30 @@ mod tests {
     fn default_settings_disable_auto_submit() {
         let settings = get_default_settings();
         assert!(!settings.auto_submit);
+        assert!(!settings.auto_submit_confirmed);
         assert_eq!(settings.auto_submit_key, AutoSubmitKey::Enter);
+        assert_eq!(
+            settings.settings_schema_version,
+            CURRENT_SETTINGS_SCHEMA_VERSION
+        );
+    }
+
+    #[test]
+    fn legacy_auto_submit_is_disabled_until_first_use_confirmation() {
+        let mut settings = get_default_settings();
+        settings.auto_submit = true;
+        let raw = serde_json::json!({
+            "settings_schema_version": 1,
+            "onboarding_completed": false,
+            "onboarding_stage": "welcome",
+            "whats_new_last_seen_version": "0.1.0",
+            "overlay_style": "live",
+            "auto_submit": true
+        });
+
+        assert!(apply_settings_migrations(&mut settings, &raw));
+        assert!(!settings.auto_submit);
+        assert!(!settings.auto_submit_confirmed);
         assert_eq!(
             settings.settings_schema_version,
             CURRENT_SETTINGS_SCHEMA_VERSION
@@ -1541,6 +1581,7 @@ mod tests {
             "onboarding_stage": "welcome",
             "whats_new_last_seen_version": default_whats_new_last_seen_version(),
             "overlay_style": "live",
+            "auto_submit_confirmed": false,
             "transcribe_accelerator": "gpu",
             "transcribe_gpu_device": 2
         });

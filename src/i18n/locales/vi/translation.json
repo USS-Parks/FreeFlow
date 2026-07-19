@@ -385,14 +385,15 @@
       },
       "autoSubmit": {
         "title": "Gửi tự động",
-        "description": "Tự động gửi tổ hợp phím đã chọn sau khi chèn văn bản. Cmd+Enter áp dụng trên macOS, còn Windows/Linux dùng Super+Enter.",
+        "description": "When enabled, saying \"press enter\" at the end of a dictation sends the selected key after inserting any preceding text. Mid-sentence and literal uses remain text.",
         "options": {
           "off": "Tắt",
           "enter": "Enter",
           "cmdEnter": "Cmd+Enter",
           "superEnter": "Super+Enter",
           "ctrlEnter": "Ctrl+Enter"
-        }
+        },
+        "confirmPrompt": "Enable the spoken \"press enter\" command? It can submit text in the active app. Secure fields remain blocked."
       },
       "translateToEnglish": {
         "label": "Dịch sang tiếng Anh",

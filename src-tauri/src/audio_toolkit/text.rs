@@ -260,7 +260,7 @@ fn get_filler_words_for_language(lang: &str) -> &'static [&'static str] {
     }
 }
 
-static MULTI_SPACE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"\s{2,}").unwrap());
+static MULTI_SPACE_PATTERN: Lazy<Regex> = Lazy::new(|| Regex::new(r"[ \t]{2,}").unwrap());
 
 /// Collapses repeated words (3+ repetitions) to a single instance.
 /// E.g., "wh wh wh wh" -> "wh", "I I I I" -> "I"
@@ -348,6 +348,369 @@ pub fn filter_transcription_output(
 
     // Trim leading/trailing whitespace
     filtered.trim().to_string()
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct VoiceControlOutput {
+    pub text: String,
+    pub submit_requested: bool,
+}
+
+const PERIOD_MARKER: char = '\u{e000}';
+const COMMA_MARKER: char = '\u{e001}';
+const QUESTION_MARKER: char = '\u{e002}';
+const EXCLAMATION_MARKER: char = '\u{e003}';
+const COLON_MARKER: char = '\u{e004}';
+const SEMICOLON_MARKER: char = '\u{e005}';
+const LINE_MARKER: char = '\u{e006}';
+const PARAGRAPH_MARKER: char = '\u{e007}';
+const BULLET_MARKER: char = '\u{e008}';
+const NUMBERED_MARKER: char = '\u{e009}';
+
+/// Apply only explicit, locally deterministic formatting and voice controls.
+/// Ambiguous prose is left untouched. Callers retain the raw transcript.
+pub fn apply_voice_controls(
+    text: &str,
+    language: &str,
+    press_enter_enabled: bool,
+) -> VoiceControlOutput {
+    let (text, submit_requested) = parse_press_enter(text, press_enter_enabled);
+    let text = apply_backtrack(&text, language);
+    let text = normalize_explicit_numbers(&text, language);
+    let text = replace_spoken_commands(&text, language);
+    VoiceControlOutput {
+        text: capitalize_sentence_starts(render_control_markers(&text).trim()),
+        submit_requested,
+    }
+}
+
+fn parse_press_enter(text: &str, enabled: bool) -> (String, bool) {
+    if !enabled {
+        return (text.to_string(), false);
+    }
+    let pattern = Regex::new(r"(?i)(?:^|[\s,]+)press[ \t]+enter[.!?]*[ \t]*$").unwrap();
+    let Some(command) = pattern.find(text) else {
+        return (text.to_string(), false);
+    };
+    let prefix = text[..command.start()].trim_end();
+    if prefix
+        .to_lowercase()
+        .strip_suffix("literal")
+        .is_some_and(|before| before.is_empty() || before.ends_with(char::is_whitespace))
+    {
+        let literal_prefix = prefix[..prefix.len() - "literal".len()].trim_end();
+        let literal = if literal_prefix.is_empty() {
+            "press enter".to_string()
+        } else {
+            format!("{literal_prefix} press enter")
+        };
+        return (literal, false);
+    }
+    (prefix.to_string(), true)
+}
+
+fn apply_backtrack(text: &str, language: &str) -> String {
+    let base = language
+        .split(['-', '_'])
+        .next()
+        .unwrap_or(language)
+        .to_ascii_lowercase();
+    let phrases: &[&str] = match base.as_str() {
+        "en" | "auto" => &["scratch that", "delete that", "forget that"],
+        "fr" => &["annule ça", "efface ça"],
+        "es" => &["borra eso", "olvida eso"],
+        _ => &[],
+    };
+    let mut output = text.to_string();
+    for phrase in phrases {
+        let pattern = Regex::new(&format!(r"(?i)\b{}\b", regex::escape(phrase))).unwrap();
+        while let Some(command) = pattern.find(&output) {
+            let before = output[..command.start()]
+                .trim_end_matches(|character: char| character.is_whitespace() || character == ',');
+            let after = output[command.end()..].trim_start_matches(|character: char| {
+                character.is_whitespace() || character == ','
+            });
+            let segment_start = before
+                .char_indices()
+                .rev()
+                .find(|(_, character)| matches!(character, '.' | '!' | '?' | '\n' | '\r'))
+                .map_or(0, |(index, character)| index + character.len_utf8());
+            let prefix = before[..segment_start].trim_end();
+            output = match (prefix.is_empty(), after.is_empty()) {
+                (true, true) => String::new(),
+                (true, false) => after.to_string(),
+                (false, true) => prefix.to_string(),
+                (false, false) => format!("{prefix} {after}"),
+            };
+        }
+    }
+    output
+}
+
+fn replace_spoken_commands(text: &str, language: &str) -> String {
+    let base = language
+        .split(['-', '_'])
+        .next()
+        .unwrap_or(language)
+        .to_ascii_lowercase();
+    let commands: &[(&str, char)] = match base.as_str() {
+        "en" | "auto" => &[
+            ("new paragraph", PARAGRAPH_MARKER),
+            ("question mark", QUESTION_MARKER),
+            ("exclamation point", EXCLAMATION_MARKER),
+            ("exclamation mark", EXCLAMATION_MARKER),
+            ("numbered item", NUMBERED_MARKER),
+            ("bullet point", BULLET_MARKER),
+            ("next bullet", BULLET_MARKER),
+            ("next item", NUMBERED_MARKER),
+            ("new line", LINE_MARKER),
+            ("line break", LINE_MARKER),
+            ("full stop", PERIOD_MARKER),
+            ("semicolon", SEMICOLON_MARKER),
+            ("semi colon", SEMICOLON_MARKER),
+            ("period", PERIOD_MARKER),
+            ("comma", COMMA_MARKER),
+            ("colon", COLON_MARKER),
+        ],
+        "fr" => &[
+            ("nouveau paragraphe", PARAGRAPH_MARKER),
+            ("nouvelle ligne", LINE_MARKER),
+            ("point d'interrogation", QUESTION_MARKER),
+            ("point d’exclamation", EXCLAMATION_MARKER),
+            ("point d'exclamation", EXCLAMATION_MARKER),
+            ("point virgule", SEMICOLON_MARKER),
+            ("deux points", COLON_MARKER),
+            ("virgule", COMMA_MARKER),
+            ("point", PERIOD_MARKER),
+        ],
+        "es" => &[
+            ("nuevo párrafo", PARAGRAPH_MARKER),
+            ("nueva línea", LINE_MARKER),
+            ("signo de interrogación", QUESTION_MARKER),
+            ("signo de exclamación", EXCLAMATION_MARKER),
+            ("punto y coma", SEMICOLON_MARKER),
+            ("dos puntos", COLON_MARKER),
+            ("coma", COMMA_MARKER),
+            ("punto", PERIOD_MARKER),
+        ],
+        _ => &[],
+    };
+    let mut output = text.to_string();
+    for (phrase, marker) in commands {
+        let pattern = Regex::new(&format!(r"(?i)\b{}\b", regex::escape(phrase))).unwrap();
+        output = pattern
+            .replace_all(&output, marker.to_string().as_str())
+            .into_owned();
+    }
+    output
+}
+
+fn render_control_markers(text: &str) -> String {
+    let mut output = String::with_capacity(text.len());
+    let mut needs_space = false;
+    let mut numbered_item = 0_u32;
+    for character in text.chars() {
+        match character {
+            PERIOD_MARKER | COMMA_MARKER | QUESTION_MARKER | EXCLAMATION_MARKER | COLON_MARKER
+            | SEMICOLON_MARKER => {
+                trim_horizontal_space(&mut output);
+                output.push(match character {
+                    PERIOD_MARKER => '.',
+                    COMMA_MARKER => ',',
+                    QUESTION_MARKER => '?',
+                    EXCLAMATION_MARKER => '!',
+                    COLON_MARKER => ':',
+                    _ => ';',
+                });
+                needs_space = true;
+            }
+            LINE_MARKER | PARAGRAPH_MARKER => {
+                trim_horizontal_space(&mut output);
+                let required = if character == PARAGRAPH_MARKER { 2 } else { 1 };
+                while output.ends_with('\n')
+                    && output.chars().rev().take_while(|c| *c == '\n').count() > required
+                {
+                    output.pop();
+                }
+                let existing = output.chars().rev().take_while(|c| *c == '\n').count();
+                for _ in existing..required {
+                    output.push('\n');
+                }
+                needs_space = false;
+            }
+            BULLET_MARKER | NUMBERED_MARKER => {
+                trim_horizontal_space(&mut output);
+                if !output.is_empty() && !output.ends_with('\n') {
+                    output.push('\n');
+                }
+                if character == BULLET_MARKER {
+                    output.push_str("- ");
+                } else {
+                    numbered_item += 1;
+                    output.push_str(&format!("{numbered_item}. "));
+                }
+                needs_space = false;
+            }
+            '\r' => {}
+            '\n' => {
+                trim_horizontal_space(&mut output);
+                output.push('\n');
+                needs_space = false;
+            }
+            character if character.is_whitespace() => {
+                if !output.is_empty() && !output.ends_with([' ', '\n']) {
+                    output.push(' ');
+                }
+            }
+            character => {
+                if needs_space
+                    && !matches!(character, ',' | '.' | ';' | ':' | '!' | '?')
+                    && !output.ends_with([' ', '\n'])
+                {
+                    output.push(' ');
+                }
+                needs_space = false;
+                output.push(character);
+            }
+        }
+    }
+    trim_horizontal_space(&mut output);
+    output
+}
+
+fn trim_horizontal_space(output: &mut String) {
+    while output.ends_with([' ', '\t']) {
+        output.pop();
+    }
+}
+
+fn normalize_explicit_numbers(text: &str, language: &str) -> String {
+    let base = language
+        .split(['-', '_'])
+        .next()
+        .unwrap_or(language)
+        .to_ascii_lowercase();
+    if !matches!(base.as_str(), "en" | "auto") {
+        return text.to_string();
+    }
+    let word = r"zero|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|and";
+    let pattern = Regex::new(&format!(
+        r"(?i)\bnumber[ \t]+((?:{word})(?:[ \t-]+(?:{word}))*)\b"
+    ))
+    .unwrap();
+    pattern
+        .replace_all(text, |captures: &regex::Captures<'_>| {
+            parse_english_number(&captures[1])
+                .map_or_else(|| captures[0].to_string(), |number| number.to_string())
+        })
+        .into_owned()
+}
+
+fn parse_english_number(words: &str) -> Option<u64> {
+    let normalized: Vec<String> = words
+        .split(|character: char| character.is_whitespace() || character == '-')
+        .filter(|word| !word.is_empty())
+        .map(str::to_ascii_lowercase)
+        .collect();
+    if normalized.is_empty() {
+        return None;
+    }
+    if normalized.iter().all(|word| {
+        matches!(
+            word.as_str(),
+            "zero" | "one" | "two" | "three" | "four" | "five" | "six" | "seven" | "eight" | "nine"
+        )
+    }) {
+        let digits = normalized
+            .iter()
+            .map(|word| match word.as_str() {
+                "zero" => '0',
+                "one" => '1',
+                "two" => '2',
+                "three" => '3',
+                "four" => '4',
+                "five" => '5',
+                "six" => '6',
+                "seven" => '7',
+                "eight" => '8',
+                _ => '9',
+            })
+            .collect::<String>();
+        return digits.parse().ok();
+    }
+    let mut total = 0_u64;
+    let mut current = 0_u64;
+    for word in normalized {
+        match word.as_str() {
+            "zero" | "and" => {}
+            "one" => current += 1,
+            "two" => current += 2,
+            "three" => current += 3,
+            "four" => current += 4,
+            "five" => current += 5,
+            "six" => current += 6,
+            "seven" => current += 7,
+            "eight" => current += 8,
+            "nine" => current += 9,
+            "ten" => current += 10,
+            "eleven" => current += 11,
+            "twelve" => current += 12,
+            "thirteen" => current += 13,
+            "fourteen" => current += 14,
+            "fifteen" => current += 15,
+            "sixteen" => current += 16,
+            "seventeen" => current += 17,
+            "eighteen" => current += 18,
+            "nineteen" => current += 19,
+            "twenty" => current += 20,
+            "thirty" => current += 30,
+            "forty" => current += 40,
+            "fifty" => current += 50,
+            "sixty" => current += 60,
+            "seventy" => current += 70,
+            "eighty" => current += 80,
+            "ninety" => current += 90,
+            "hundred" if current > 0 => current *= 100,
+            "thousand" if current > 0 => {
+                total += current * 1_000;
+                current = 0;
+            }
+            _ => return None,
+        }
+    }
+    Some(total + current)
+}
+
+fn capitalize_sentence_starts(text: &str) -> String {
+    let mut characters: Vec<char> = text.chars().collect();
+    let mut sentence_start = true;
+    let mut index = 0;
+    while index < characters.len() {
+        let character = characters[index];
+        if sentence_start && character.is_alphabetic() {
+            let end = (index..characters.len())
+                .find(|position| {
+                    characters[*position].is_whitespace()
+                        || matches!(characters[*position], ',' | '.' | ';' | ':' | '!' | '?')
+                })
+                .unwrap_or(characters.len());
+            let token = &characters[index..end];
+            let identifier_like = token.iter().skip(1).any(|value| value.is_uppercase())
+                || token
+                    .iter()
+                    .any(|value| *value == '_' || value.is_numeric());
+            if !identifier_like && character.is_lowercase() {
+                let uppercase: Vec<char> = character.to_uppercase().collect();
+                characters.splice(index..=index, uppercase.iter().copied());
+            }
+            sentence_start = false;
+        }
+        if matches!(character, '.' | '!' | '?' | '\n') {
+            sentence_start = true;
+        }
+        index += 1;
+    }
+    characters.into_iter().collect()
 }
 
 #[cfg(test)]
@@ -537,6 +900,86 @@ mod tests {
         let text = "um I think this works";
         let result = filter_transcription_output(text, "xx", &None);
         assert_eq!(result, "um I think this works");
+    }
+
+    #[test]
+    fn voice_controls_format_punctuation_paragraphs_and_lists() {
+        let result = apply_voice_controls(
+            "hello comma world period new paragraph bullet point first next bullet second",
+            "en",
+            false,
+        );
+        assert_eq!(result.text, "Hello, world.\n\n- First\n- Second");
+        assert!(!result.submit_requested);
+
+        let numbered = apply_voice_controls(
+            "tasks colon numbered item alpha next item beta",
+            "en",
+            false,
+        );
+        assert_eq!(numbered.text, "Tasks:\n1. Alpha\n2. Beta");
+    }
+
+    #[test]
+    fn voice_controls_apply_explicit_numbers_and_backtrack_conservatively() {
+        let filtered = filter_transcription_output(
+            "uh send codeName number one two three scratch that number forty two period",
+            "en",
+            &None,
+        );
+        let result = apply_voice_controls(&filtered, "en", false);
+        assert_eq!(result.text, "42.");
+        assert!(!result.text.contains("codeName"));
+    }
+
+    #[test]
+    fn ambiguous_numbers_names_and_identifiers_remain_literal() {
+        let result = apply_voice_controls(
+            "one Direction uses codeName and snake_case period",
+            "en",
+            false,
+        );
+        assert_eq!(result.text, "One Direction uses codeName and snake_case.");
+    }
+
+    #[test]
+    fn multilingual_commands_are_scoped_to_the_effective_language() {
+        assert_eq!(
+            apply_voice_controls(
+                "bonjour virgule monde point nouveau paragraphe merci",
+                "fr-FR",
+                false,
+            )
+            .text,
+            "Bonjour, monde.\n\nMerci"
+        );
+        assert_eq!(
+            apply_voice_controls("bonjour virgule monde", "de", false).text,
+            "Bonjour virgule monde"
+        );
+    }
+
+    #[test]
+    fn press_enter_requires_enablement_and_a_valid_utterance_end() {
+        let disabled = apply_voice_controls("send this press enter", "en", false);
+        assert_eq!(disabled.text, "Send this press enter");
+        assert!(!disabled.submit_requested);
+
+        let enabled = apply_voice_controls("send this, press enter.", "en", true);
+        assert_eq!(enabled.text, "Send this");
+        assert!(enabled.submit_requested);
+
+        let command_only = apply_voice_controls("PRESS ENTER", "en", true);
+        assert!(command_only.text.is_empty());
+        assert!(command_only.submit_requested);
+
+        let middle = apply_voice_controls("say press enter literally here", "en", true);
+        assert_eq!(middle.text, "Say press enter literally here");
+        assert!(!middle.submit_requested);
+
+        let escaped = apply_voice_controls("literal press enter", "en", true);
+        assert_eq!(escaped.text, "Press enter");
+        assert!(!escaped.submit_requested);
     }
 
     #[test]

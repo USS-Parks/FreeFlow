@@ -430,6 +430,11 @@ pub(crate) struct ProcessedTranscription {
     pub final_text: String,
     pub post_processed_text: Option<String>,
     pub post_process_prompt: Option<String>,
+    pub submit_requested: bool,
+}
+
+fn has_deliverable_output(processed: &ProcessedTranscription) -> bool {
+    !processed.final_text.is_empty() || processed.submit_requested
 }
 
 /// Resolve the persisted language *intent* into the language the currently-loaded
@@ -492,6 +497,17 @@ pub(crate) async fn process_transcription_output(
         post_processed_text = Some(final_text.clone());
     }
 
+    let voice_output = crate::audio_toolkit::apply_voice_controls(
+        &final_text,
+        &effective_language,
+        settings.auto_submit && settings.auto_submit_confirmed,
+    );
+    let submit_requested = voice_output.submit_requested;
+    if voice_output.text != final_text {
+        final_text = voice_output.text;
+        post_processed_text = Some(final_text.clone());
+    }
+
     let snippet_manager = app.state::<Arc<crate::managers::snippets::SnippetManager>>();
     match snippet_manager.expand(&final_text) {
         Ok(expanded) if expanded != final_text => {
@@ -506,6 +522,7 @@ pub(crate) async fn process_transcription_output(
         final_text,
         post_processed_text,
         post_process_prompt,
+        submit_requested,
     }
 }
 
@@ -955,13 +972,14 @@ impl ShortcutAction for TranscribeAction {
                                 None,
                             );
 
-                            if processed.final_text.is_empty() {
+                            if !has_deliverable_output(&processed) {
                                 show_warning_overlay(&ah);
                                 change_tray_icon(&ah, TrayIconState::Idle);
                             } else {
                                 let ah_clone = ah.clone();
                                 let paste_time = Instant::now();
                                 let final_text = processed.final_text;
+                                let submit_requested = processed.submit_requested;
                                 let rm_for_paste = Arc::clone(&rm);
                                 ah.run_on_main_thread(move || {
                                     if rm_for_paste.was_cancelled_since(cancel_generation) {
@@ -975,6 +993,7 @@ impl ShortcutAction for TranscribeAction {
                                         final_text,
                                         ah_clone.clone(),
                                         captured_target,
+                                        submit_requested,
                                     ) {
                                         Ok(outcome) if outcome.inserted => {
                                             debug!(
@@ -1165,7 +1184,10 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
 
 #[cfg(test)]
 mod tests {
-    use super::{complete_unless_cancelled, is_blank_transcription, should_use_streaming_overlay};
+    use super::{
+        complete_unless_cancelled, has_deliverable_output, is_blank_transcription,
+        should_use_streaming_overlay, ProcessedTranscription,
+    };
     use crate::settings::OverlayStyle;
     use std::future;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -1184,6 +1206,23 @@ mod tests {
     fn non_blank_transcription_is_kept() {
         assert!(!is_blank_transcription("hello"));
         assert!(!is_blank_transcription("  hello  "));
+    }
+
+    #[test]
+    fn command_only_submit_is_delivered_without_text() {
+        let command = ProcessedTranscription {
+            final_text: String::new(),
+            post_processed_text: Some(String::new()),
+            post_process_prompt: None,
+            submit_requested: true,
+        };
+        assert!(has_deliverable_output(&command));
+
+        let blank = ProcessedTranscription {
+            submit_requested: false,
+            ..command
+        };
+        assert!(!has_deliverable_output(&blank));
     }
 
     #[test]

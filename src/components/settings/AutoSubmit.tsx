@@ -1,10 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { Dropdown } from "../ui/Dropdown";
 import { SettingContainer } from "../ui/SettingContainer";
 import { useSettings } from "../../hooks/useSettings";
 import { useOsType } from "../../hooks/useOsType";
-import type { AutoSubmitKey } from "@/bindings";
+import { commands, type AutoSubmitKey } from "@/bindings";
 
 interface AutoSubmitProps {
   descriptionMode?: "inline" | "tooltip";
@@ -18,8 +19,10 @@ export const AutoSubmit: React.FC<AutoSubmitProps> = React.memo(
     const { t } = useTranslation();
     const osType = useOsType();
     const { getSetting, updateSetting, isUpdating } = useSettings();
+    const [confirmedThisSession, setConfirmedThisSession] = useState(false);
 
     const enabled = getSetting("auto_submit") ?? false;
+    const confirmed = getSetting("auto_submit_confirmed") ?? false;
     const selectedKey = (getSetting("auto_submit_key") ||
       "enter") as AutoSubmitKey;
     const selectedValue: AutoSubmitOptionValue = enabled ? selectedKey : "off";
@@ -53,6 +56,18 @@ export const AutoSubmit: React.FC<AutoSubmitProps> = React.memo(
       if (selected === "off") {
         await updateSetting("auto_submit", false);
         return;
+      }
+
+      if (!confirmed && !confirmedThisSession) {
+        if (!window.confirm(t("settings.advanced.autoSubmit.confirmPrompt"))) {
+          return;
+        }
+        const result = await commands.confirmAutoSubmit();
+        if (result.status === "error") {
+          toast.error(result.error);
+          return;
+        }
+        setConfirmedThisSession(true);
       }
 
       await updateSetting("auto_submit_key", selected as AutoSubmitKey);

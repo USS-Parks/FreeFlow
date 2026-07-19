@@ -889,7 +889,19 @@ pub fn change_clipboard_handling_setting(app: AppHandle, handling: String) -> Re
 #[specta::specta]
 pub fn change_auto_submit_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
+    if enabled && !settings.auto_submit_confirmed {
+        return Err("Confirm press-enter behavior before enabling it".to_string());
+    }
     settings.auto_submit = enabled;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn confirm_auto_submit(app: AppHandle) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.auto_submit_confirmed = true;
     settings::write_settings(&app, settings);
     Ok(())
 }

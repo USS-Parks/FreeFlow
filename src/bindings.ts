@@ -310,6 +310,14 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async confirmAutoSubmit(): Promise<Result<null, string>> {
+    try {
+      return { status: "ok", data: await TAURI_INVOKE("confirm_auto_submit") };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async changeAutoSubmitKeySetting(key: string): Promise<Result<null, string>> {
     try {
       return {
@@ -1609,6 +1617,7 @@ export type AppSettings = {
   paste_method?: PasteMethod;
   clipboard_handling?: ClipboardHandling;
   auto_submit?: boolean;
+  auto_submit_confirmed?: boolean;
   auto_submit_key?: AutoSubmitKey;
   post_process_enabled?: boolean;
   post_process_provider_id?: string;

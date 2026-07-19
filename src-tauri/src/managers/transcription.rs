@@ -1129,7 +1129,8 @@ impl TranscriptionManager {
             effective_language_for_model(&settings, self.model_manager.as_ref(), &model_id);
         // Streaming models do not receive a decode prompt. Legacy custom words
         // and the SQLite dictionary therefore use their local correction paths.
-        let filtered = post_process_transcription_text(raw.clone(), &settings, false);
+        let filtered =
+            post_process_transcription_text(raw.clone(), &settings, &effective_language, false);
         let filtered = apply_dictionary_rules(&self.app_handle, filtered);
         let elapsed_secs = started_at.elapsed().as_secs_f64();
         let audio_secs = audio_len as f64 / 16_000.0;
@@ -1494,9 +1495,13 @@ impl TranscriptionManager {
         // Preserve the legacy fuzzy custom-word path for upgraded settings.
         // SQLite dictionary replacements run after it for every engine.
         let (raw_result, detected_language) = result;
+        let cleanup_language = detected_language
+            .as_deref()
+            .unwrap_or(validated_language.as_str());
         let filtered_result = post_process_transcription_text(
             raw_result.clone(),
             &settings,
+            cleanup_language,
             model_is_whisper && model_takes_initial_prompt && !dictionary_prompt_terms.is_empty(),
         );
         let filtered_result = apply_dictionary_rules(&self.app_handle, filtered_result);
@@ -1719,6 +1724,7 @@ fn transcribe_cpp_run_plan(
 fn post_process_transcription_text(
     raw: String,
     settings: &AppSettings,
+    language: &str,
     custom_words_already_prompted: bool,
 ) -> String {
     let corrected = if !settings.custom_words.is_empty() && !custom_words_already_prompted {
@@ -1731,11 +1737,7 @@ fn post_process_transcription_text(
         raw
     };
 
-    filter_transcription_output(
-        &corrected,
-        &settings.app_language,
-        &settings.custom_filler_words,
-    )
+    filter_transcription_output(&corrected, language, &settings.custom_filler_words)
 }
 
 fn dictionary_initial_prompt(
@@ -2024,6 +2026,7 @@ pub fn get_available_accelerators() -> AvailableAccelerators {
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
 

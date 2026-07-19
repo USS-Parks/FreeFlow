@@ -848,6 +848,15 @@ fn success_outcome(
     }
 }
 
+fn command_only_outcome() -> InsertionOutcome {
+    InsertionOutcome {
+        method: InsertionMethod::Direct,
+        inserted: true,
+        manual_reason: None,
+        undo: None,
+    }
+}
+
 fn send_return_key(enigo: &mut Enigo, key_type: AutoSubmitKey) -> Result<(), String> {
     match key_type {
         AutoSubmitKey::Enter => {
@@ -891,14 +900,20 @@ fn send_return_key(enigo: &mut Enigo, key_type: AutoSubmitKey) -> Result<(), Str
     Ok(())
 }
 
-fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool {
-    auto_submit && paste_method != PasteMethod::None
+fn should_send_auto_submit(
+    auto_submit: bool,
+    confirmed: bool,
+    requested: bool,
+    paste_method: PasteMethod,
+) -> bool {
+    auto_submit && confirmed && requested && paste_method != PasteMethod::None
 }
 
 pub fn paste(
     text: String,
     app_handle: AppHandle,
     captured_target: Option<PlatformContext>,
+    submit_requested: bool,
 ) -> Result<InsertionOutcome, String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
@@ -913,6 +928,12 @@ pub fn paste(
         current_target.preceding_text.as_deref(),
         settings.append_trailing_space,
     );
+    let should_submit = should_send_auto_submit(
+        settings.auto_submit,
+        settings.auto_submit_confirmed,
+        submit_requested,
+        paste_method,
+    );
 
     info!(
         "Using paste method: {:?}, delay before: {}ms, delay after: {}ms",
@@ -921,6 +942,8 @@ pub fn paste(
 
     let outcome = if let Some(reason) = block_reason {
         manual_outcome(reason)
+    } else if text.is_empty() && should_submit {
+        command_only_outcome()
     } else if text.is_empty() {
         manual_outcome("empty_text")
     } else if paste_method == PasteMethod::None {
@@ -1003,7 +1026,7 @@ pub fn paste(
         manual_outcome("input_service_unavailable")
     };
 
-    if outcome.inserted && should_send_auto_submit(settings.auto_submit, paste_method) {
+    if outcome.inserted && should_submit {
         let submit_result = app_handle
             .try_state::<EnigoState>()
             .ok_or_else(|| "Enigo state not initialized for auto-submit".to_string())
@@ -1078,22 +1101,82 @@ mod tests {
 
     #[test]
     fn auto_submit_requires_setting_enabled() {
-        assert!(!should_send_auto_submit(false, PasteMethod::CtrlV));
-        assert!(!should_send_auto_submit(false, PasteMethod::Direct));
+        assert!(!should_send_auto_submit(
+            false,
+            true,
+            true,
+            PasteMethod::CtrlV
+        ));
+        assert!(!should_send_auto_submit(
+            false,
+            true,
+            true,
+            PasteMethod::Direct
+        ));
+        assert!(!should_send_auto_submit(
+            true,
+            false,
+            true,
+            PasteMethod::Direct
+        ));
+        assert!(!should_send_auto_submit(
+            true,
+            true,
+            false,
+            PasteMethod::Direct
+        ));
     }
 
     #[test]
     fn auto_submit_skips_none_paste_method() {
-        assert!(!should_send_auto_submit(true, PasteMethod::None));
+        assert!(!should_send_auto_submit(
+            true,
+            true,
+            true,
+            PasteMethod::None
+        ));
     }
 
     #[test]
     fn auto_submit_runs_for_active_paste_methods() {
-        assert!(should_send_auto_submit(true, PasteMethod::Reliable));
-        assert!(should_send_auto_submit(true, PasteMethod::CtrlV));
-        assert!(should_send_auto_submit(true, PasteMethod::Direct));
-        assert!(should_send_auto_submit(true, PasteMethod::CtrlShiftV));
-        assert!(should_send_auto_submit(true, PasteMethod::ShiftInsert));
+        assert!(should_send_auto_submit(
+            true,
+            true,
+            true,
+            PasteMethod::Reliable
+        ));
+        assert!(should_send_auto_submit(
+            true,
+            true,
+            true,
+            PasteMethod::CtrlV
+        ));
+        assert!(should_send_auto_submit(
+            true,
+            true,
+            true,
+            PasteMethod::Direct
+        ));
+        assert!(should_send_auto_submit(
+            true,
+            true,
+            true,
+            PasteMethod::CtrlShiftV
+        ));
+        assert!(should_send_auto_submit(
+            true,
+            true,
+            true,
+            PasteMethod::ShiftInsert
+        ));
+    }
+
+    #[test]
+    fn command_only_completion_has_no_fake_undo_record() {
+        let outcome = command_only_outcome();
+        assert!(outcome.inserted);
+        assert!(outcome.undo.is_none());
+        assert_eq!(outcome.method, InsertionMethod::Direct);
     }
 
     #[test]

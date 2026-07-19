@@ -18,6 +18,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-18 | FF-V4    | In progress | Target capture/security guard, direct-first insertion, clipboard/manual fallbacks, boundary formatting, paste-last, undo metadata, localized tray UI, frozen live matrix                        | 159/159 runnable Rust library tests passed with 2 ignored; Windows Cargo check; ESLint; service-boundary; Prettier; TypeScript; Vite build; 22/22 translation catalogs; hosted Windows/macOS/provenance/security run `29675125703` passed                                               | `5877aacea9aa2e9cb2be832cf5df2f77c981a2fb`                                                                                                                                                                                 | Live 100-attempt application matrices, clipboard preservation, secure-field refusal, and interactive Windows/macOS evidence remain open; FF-V5 has not begun                                    |
 | 2026-07-19 | FF-V5    | Complete    | Original status bar states/docking/accessibility, state-bearing tray controls, Hub keyboard navigation, 23 catalogs, retained live matrix                                                       | Frozen install; frontend/translation/build gates; 162 Rust tests; strict Clippy delta; no-bundle build; RustSec/provenance; hosted run `29680441253`                                                                                                                                    | `b02751dc4e0edb06ec0827dfc3fbcdb24e2d7d6d`; closeout `26fc961e23e97e5d358b21f619d4464c37cf02f7`                                                                                                                            | Retained live multi-monitor/scaling/full-screen/focus/drag/screen-reader matrix assigned to FF-R2                                                                                               |
 | 2026-07-19 | FF-V6    | Complete    | Resumable onboarding, privacy promise, permission repair, model/completion separation, shortcut/autostart preferences, first-dictation proof, diagnostics, uninstall-data guidance, 23 catalogs | Frozen install; frontend/446-key translation/build gates; 168 Rust tests; strict Clippy delta; no-bundle release build; RustSec/provenance; hosted run `29690161596` passed                                                                                                             | `bcea051e8f3435eb927502d83fb2c14f7c6b091c`                                                                                                                                                                                 | Retained signed-build live install/permissions/restart/upgrade/uninstall matrix assigned to FF-R2                                                                                               |
+| 2026-07-19 | FF-P4    | Candidate   | Deterministic multilingual formatting/backtrack, effective-language filler policy, raw/final separation, confirmed utterance-final submit, 23 catalogs, strict-Clippy baseline cleanup          | Frozen install; frontend/502-key translation/build gates; 195 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance                                                                                                                            | Recorded after candidate commit                                                                                                                                                                                            | Retained interactive Windows/macOS submit matrix remains assigned to FF-R2                                                                                                                      |
 
 ### 2026-07-18 — FF-G3
 
@@ -336,6 +337,38 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Commit SHA: `e753b1527485756ae7424b337e4bacbf03d47955`.
 - Deviations or remaining work: none in FF-P3 implementation scope. The
   retained cross-platform interactive release matrices remain owned by FF-R2.
+
+### 2026-07-19 — FF-P4 (candidate)
+
+- Objective: deliver deterministic spoken formatting, correction controls,
+  effective-language filler policy, and an explicit-consent end-of-utterance
+  submit command without relying on an LLM.
+- Starting commit: `5a1b3b98581ceec2d542afae99cfb2e439d3dcb0` on canonical
+  `main`.
+- Reuse classification: extension at the shared transcription-output,
+  platform-context, clipboard delivery, typed settings/bindings, and i18next
+  seams; no new runtime dependency.
+- Files changed: deterministic text controls and fixtures; final-output and
+  effective-language integration; guarded insertion/submit path; settings
+  migration and confirmation command; Advanced settings UI; generated bindings;
+  23 locale catalogs; strict-Clippy baseline cleanup; behavior and gate records.
+- Verification commands: frozen Bun install; ESLint/service boundary; Prettier
+  and Rustfmt; 502-key translation consistency; TypeScript/Vite production
+  build; full Rust tests; warnings-denied Clippy without inherited exemptions;
+  optimized Tauri no-bundle build; RustSec; provenance; diff checks.
+- Automated evidence: 195/195 runnable Rust tests pass with the two explicit
+  731 MB live-model tests ignored. Deterministic formatting, multilingual
+  scoping, ambiguity preservation, backtrack, command-only delivery, literal
+  submit text, settings migration, and secure target fixtures pass. RustSec
+  reports no denied vulnerability and 28 policy-allowed upstream warnings.
+- Artifact: 44,486,656-byte `freeflow.exe`, SHA-256
+  `cba653ba97c876abede24e777212d21187ffa4e4631261ee324c2868f339654d`.
+- Result: local candidate gate passed; hosted native Windows/macOS, provenance,
+  and security evidence is pending at the exact candidate commit.
+- Commit SHA: recorded by the candidate commit containing this entry.
+- Deviations or remaining work: the retained interactive press-enter matrix is
+  mandatory at FF-R2 under the approved consolidation; no public-release claim
+  is made by this candidate.
 
 ## Entry template
 

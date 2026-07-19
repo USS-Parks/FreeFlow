@@ -55,7 +55,7 @@ impl ModelArtifactManifest {
         format!("{}.freeflow-model.json", self.filename)
     }
 
-    pub fn destination<'a>(&self, models_dir: &'a Path) -> std::path::PathBuf {
+    pub fn destination(&self, models_dir: &Path) -> std::path::PathBuf {
         models_dir.join(&self.filename)
     }
 }
