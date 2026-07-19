@@ -21,7 +21,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-19 | FF-P4    | Complete    | Deterministic multilingual formatting/backtrack, effective-language filler policy, raw/final separation, confirmed utterance-final submit, 23 catalogs, strict-Clippy baseline cleanup                      | Frozen install; frontend/502-key translation/build gates; 195 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance; hosted run `29698366361` passed                                                                                           | `f1d66200f1b345a8a82157bd78965d84044dac2c`                                                                                                                                                                                 | Retained interactive Windows/macOS submit matrix remains assigned to FF-R2                                                                                                                      |
 | 2026-07-19 | FF-P5    | Complete    | Local process classification, typed per-category boundary/context profiles, fail-closed minimum context, denylist, redacted diagnostics, 23 catalogs                                                        | Frozen install; frontend/537-key translation/build gates; 201 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance; hosted run `29700140823` passed                                                                                           | `44c9ac6b8371440e20aa440542396022dbbeb3e0`                                                                                                                                                                                 | Windows artifact 44,581,888 bytes, SHA-256 `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`                                                                                   |
 | 2026-07-19 | FF-A1    | Complete    | Consent-bound pinned llama.cpp runtime and SmolLM2 model, local-only provider migration, resource recommendations, bounded loopback execution, cancellation/timeout/corrupt-model raw fallback, 23 catalogs | Frontend/552-key translation/build gates; 210 Rust tests plus 2 ignored; strict Clippy; Windows explicit install and CPU/Vulkan/timeout/corruption live probes; hosted live run `29703174180`; hosted native run `29703174188`                                                          | `ba0bc09b0cc3d19d1d4bbc7b3c0157808fc9a9fb`                                                                                                                                                                                 | Windows CPU/Vulkan and Apple Silicon CPU/Metal paths passed; FF-A2 is next                                                                                                                      |
-| 2026-07-19 | FF-A2    | In progress | None/Light/Medium/High cleanup, per-app FreeFlow styles, deterministic pre-transform backtrack, semantic output guards, raw/final review and reversible cleanup, 23 catalogs                                | Frontend/569-key translation/build gates; 217 Rust tests plus 2 ignored; strict Clippy; optimized Windows no-bundle build; RustSec/provenance passed                                                                                                                                    | Candidate pending                                                                                                                                                                                                          | Hosted Windows/macOS candidate CI required before closeout                                                                                                                                      |
+| 2026-07-19 | FF-A2    | Complete    | None/Light/Medium/High cleanup, per-app FreeFlow styles, deterministic pre-transform backtrack, semantic output guards, raw/final review and reversible cleanup, 23 catalogs                                | Frontend/569-key translation/build gates; 217 Rust tests plus 2 ignored; strict Clippy; optimized Windows no-bundle build; RustSec/provenance; hosted run `29705327094`                                                                                                                 | `e91171dd7eb36098ec5444f0df799296cd3cf5cb`                                                                                                                                                                                 | Windows/macOS native, provenance, and security passed; FF-A3 is next                                                                                                                            |
 
 ### 2026-07-18 — FF-G3
 
@@ -447,7 +447,7 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Deviations or remaining work: Milestone A hardware-tier acceptance remains
   owned by its final milestone and retained FF-R2 release evidence.
 
-### 2026-07-19 — FF-A2 (candidate)
+### 2026-07-19 — FF-A2 (complete)
 
 - Objective: implement explicit cleanup strengths and original per-application
   FreeFlow styles with deterministic preprocessing, optional bounded local
@@ -472,12 +472,12 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   and transform-failure raw-authority fixtures pass. All catalogs are complete.
 - Artifact: 44,902,400-byte `freeflow.exe`, SHA-256
   `543461f516d5ab2f3eb7be5406596bef63081e4b083832f6cfee69ec100f077b`.
-- Result: candidate implementation complete; hosted Windows/macOS native,
-  provenance, and security results pending.
-- Commit SHA: pending candidate commit.
+- Hosted evidence: GitHub Actions run `29705327094` passed Windows and macOS
+  native tests, provenance, and security at the exact candidate commit.
+- Result: FF-A2 is complete and FF-A3 is next.
+- Commit SHA: `e91171dd7eb36098ec5444f0df799296cd3cf5cb`.
 - Deviations or remaining work: Milestone A hardware-tier acceptance remains
-  owned by its final milestone and retained FF-R2 release evidence; FF-A3 must
-  not begin before FF-A2 closeout.
+  owned by its final milestone and retained FF-R2 release evidence.
 
 ## Entry template
 
