@@ -41,7 +41,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: windows-latest
+          - runner: windows-2022
             platform: windows-x86_64
             family: windows
             install_onnxruntime: false
