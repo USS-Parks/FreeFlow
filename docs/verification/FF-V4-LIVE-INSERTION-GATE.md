@@ -9,7 +9,7 @@ not substitute for this matrix.
 ## Candidate and invariants
 
 - Starting commit: `9bf7583266eecbd8fa053c58db6d186bf78152f9`.
-- Candidate commit: pending.
+- Candidate commit: `5877aacea9aa2e9cb2be832cf5df2f77c981a2fb`.
 - Each platform must complete 100 normal insertion attempts and reach at least
   98 successful direct-or-clipboard deliveries.
 - Every attempt records the expected and actual target, exact delivered text,
