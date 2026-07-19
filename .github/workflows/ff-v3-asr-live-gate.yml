@@ -75,13 +75,18 @@ jobs:
         if: matrix.family == 'windows'
         shell: pwsh
         run: |
-          winget install --id KhronosGroup.VulkanSDK --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
-          $sdk = Get-ChildItem -LiteralPath C:\VulkanSDK -Directory |
-            Sort-Object { [version]$_.Name } -Descending |
-            Select-Object -First 1
-          if ($null -eq $sdk) { throw "Vulkan SDK was not installed" }
-          "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          "$($sdk.FullName)\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $version = "1.4.350.0"
+          $installer = Join-Path $env:RUNNER_TEMP "vulkansdk-windows-X64-$version.exe"
+          $sdk = "C:\VulkanSDK\$version"
+          $expectedSha256 = "855b27ba05d2d8119c5114c5d4ff870ca38f2c632b11e1bb9923b9b7e6ecfe7b"
+          curl.exe --fail --location --retry 4 --output $installer "https://sdk.lunarg.com/sdk/download/$version/windows/vulkansdk-windows-X64-$version.exe"
+          $actualSha256 = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actualSha256 -ne $expectedSha256) { throw "Vulkan SDK SHA-256 mismatch" }
+          & $installer install --accept-licenses --default-answer --confirm-command --root $sdk
+          if ($LASTEXITCODE -ne 0) { throw "Vulkan SDK installer exited with code $LASTEXITCODE" }
+          if (-not (Test-Path -LiteralPath "$sdk\Bin" -PathType Container)) { throw "Vulkan SDK was not installed at $sdk" }
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "$sdk\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Install macOS evaluation dependencies
         if: matrix.family == 'macos'
