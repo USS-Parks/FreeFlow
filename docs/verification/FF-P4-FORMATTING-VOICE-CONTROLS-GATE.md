@@ -68,6 +68,11 @@ policy-allowed upstream warnings.
 The optimized Windows executable is 44,486,656 bytes with SHA-256
 `cba653ba97c876abede24e777212d21187ffa4e4631261ee324c2868f339654d`.
 
+Hosted CI run
+[`29698366361`](https://github.com/USS-Parks/FreeFlow/actions/runs/29698366361)
+passed native Windows and macOS foundation jobs, provenance, and security at
+exact candidate commit `f1d66200f1b345a8a82157bd78965d84044dac2c`.
+
 The retained interactive Windows/macOS press-enter application matrix remains
 mandatory at FF-R2 under the PSPR's 2026-07-19 consolidation. This evidence is
 the deterministic/native implementation gate, not a public-release claim.
