@@ -78,9 +78,16 @@ git diff --check
 ```
 
 The dedicated `FF-A1 local transform live gate` workflow independently
-downloads and verifies the same pinned artifacts, then benchmarks CPU/Vulkan on
-hosted Windows and CPU/Metal on hosted Apple Silicon. Its candidate-run result
-is recorded during closeout.
+downloaded and verified the same pinned artifacts at exact candidate
+`ba0bc09b0cc3d19d1d4bbc7b3c0157808fc9a9fb`. Hosted run `29703174180` passed
+CPU/Vulkan on Windows and CPU/Metal on Apple Silicon. Windows CPU completed in
+1,280 ms and Vulkan in 605 ms. Apple Silicon CPU completed in 21,168 ms and
+Metal in 214,180 ms. Every path returned nonempty output. The hosted Metal
+number includes cold runtime/shader startup; FreeFlow's bounded 30-second
+default preserves raw text when a cold transform exceeds that limit.
+
+Normal hosted run `29703174188` passed Windows and macOS foundation jobs,
+provenance, and RustSec at the same exact candidate commit.
 
 The local candidate gates pass 210 runnable Rust tests with the two explicit
 731 MB Parakeet live-install tests ignored. All 552 translation keys are present

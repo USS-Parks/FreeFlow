@@ -20,7 +20,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-19 | FF-V6    | Complete    | Resumable onboarding, privacy promise, permission repair, model/completion separation, shortcut/autostart preferences, first-dictation proof, diagnostics, uninstall-data guidance, 23 catalogs             | Frozen install; frontend/446-key translation/build gates; 168 Rust tests; strict Clippy delta; no-bundle release build; RustSec/provenance; hosted run `29690161596` passed                                                                                                             | `bcea051e8f3435eb927502d83fb2c14f7c6b091c`                                                                                                                                                                                 | Retained signed-build live install/permissions/restart/upgrade/uninstall matrix assigned to FF-R2                                                                                               |
 | 2026-07-19 | FF-P4    | Complete    | Deterministic multilingual formatting/backtrack, effective-language filler policy, raw/final separation, confirmed utterance-final submit, 23 catalogs, strict-Clippy baseline cleanup                      | Frozen install; frontend/502-key translation/build gates; 195 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance; hosted run `29698366361` passed                                                                                           | `f1d66200f1b345a8a82157bd78965d84044dac2c`                                                                                                                                                                                 | Retained interactive Windows/macOS submit matrix remains assigned to FF-R2                                                                                                                      |
 | 2026-07-19 | FF-P5    | Complete    | Local process classification, typed per-category boundary/context profiles, fail-closed minimum context, denylist, redacted diagnostics, 23 catalogs                                                        | Frozen install; frontend/537-key translation/build gates; 201 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance; hosted run `29700140823` passed                                                                                           | `44c9ac6b8371440e20aa440542396022dbbeb3e0`                                                                                                                                                                                 | Windows artifact 44,581,888 bytes, SHA-256 `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`                                                                                   |
-| 2026-07-19 | FF-A1    | In progress | Consent-bound pinned llama.cpp runtime and SmolLM2 model, local-only provider migration, resource recommendations, bounded loopback execution, cancellation/timeout/corrupt-model raw fallback, 23 catalogs | Frontend/552-key translation/build gates; 210 Rust tests plus 2 ignored; strict Clippy; Windows explicit install and CPU/Vulkan/timeout/corruption live probes passed; hosted CPU/Vulkan/Metal workflow defined                                                                         | Candidate pending                                                                                                                                                                                                          | Hosted native and local-transform workflow results required before prompt closeout                                                                                                              |
+| 2026-07-19 | FF-A1    | Complete    | Consent-bound pinned llama.cpp runtime and SmolLM2 model, local-only provider migration, resource recommendations, bounded loopback execution, cancellation/timeout/corrupt-model raw fallback, 23 catalogs | Frontend/552-key translation/build gates; 210 Rust tests plus 2 ignored; strict Clippy; Windows explicit install and CPU/Vulkan/timeout/corruption live probes; hosted live run `29703174180`; hosted native run `29703174188`                                                          | `ba0bc09b0cc3d19d1d4bbc7b3c0157808fc9a9fb`                                                                                                                                                                                 | Windows CPU/Vulkan and Apple Silicon CPU/Metal paths passed; FF-A2 is next                                                                                                                      |
 
 ### 2026-07-18 — FF-G3
 
@@ -408,7 +408,7 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   application-context matrix remains mandatory at FF-R2 under the approved
   consolidation; no public-release claim is made by this candidate.
 
-### 2026-07-19 — FF-A1 (candidate)
+### 2026-07-19 — FF-A1 (complete)
 
 - Objective: add an optional local transform provider with immutable licensed
   artifacts, explicit consent, resource-aware acceleration, cancellation,
@@ -431,13 +431,20 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   `8d9eb4e5d7358b68d9334b250eb010887a238014c9a499bc7da199808ef82947`
   installed 138,726,136 verified bytes. CPU completed in 6,322 ms and Vulkan in
   6,880 ms including startup. Timeout and corrupt-model probes failed closed.
-- Result: candidate implementation complete; hosted Windows CPU/Vulkan,
-  macOS CPU/Metal, native build, provenance, and security results pending.
+- Hosted evidence: live run `29703174180` passed at exact candidate
+  `ba0bc09b0cc3d19d1d4bbc7b3c0157808fc9a9fb`. Windows CPU completed in
+  1,280 ms and Vulkan in 605 ms; Apple Silicon CPU completed in 21,168 ms and
+  Metal in 214,180 ms. All paths returned nonempty output. The application
+  retains its bounded 30-second default and lossless raw fallback, so a cold
+  hosted Metal start beyond that bound cannot lose or replace the transcript.
+- Hosted evidence: native run `29703174188` passed Windows and macOS
+  foundation jobs, provenance, and RustSec at the exact candidate commit.
+- Result: FF-A1 is complete and FF-A2 is next.
 - Artifact: 44,963,328-byte `freeflow.exe`, SHA-256
   `3ad039dcc205abf2a78afdc64a431912cd97507a5d0ba207ba493a41c4bb65a1`.
-- Commit SHA: pending candidate commit.
-- Deviations or remaining work: none inside FF-A1 after hosted candidate gates;
-  FF-A2 must not begin before closeout.
+- Commit SHA: `ba0bc09b0cc3d19d1d4bbc7b3c0157808fc9a9fb`.
+- Deviations or remaining work: Milestone A hardware-tier acceptance remains
+  owned by its final milestone and retained FF-R2 release evidence.
 
 ## Entry template
 
