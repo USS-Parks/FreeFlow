@@ -64,3 +64,8 @@ optimized Windows executable is 44,207,104 bytes with SHA-256
 This prompt concerns deterministic local storage behavior and does not require
 foreground input automation. The retained cross-platform release matrices remain
 owned by FF-R2.
+
+Hosted CI run
+[`29692703288`](https://github.com/USS-Parks/FreeFlow/actions/runs/29692703288)
+passed native Windows and macOS foundation jobs, provenance, and security at
+exact candidate commit `20b03120c1cbe6b9633cdd47c4f2b11b588b73e5`.

@@ -239,7 +239,7 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   uninstall-data matrix remains mandatory at FF-R2 under the approved
   consolidation; no public-release claim is made by this candidate.
 
-### 2026-07-19 — FF-P1 candidate
+### 2026-07-19 — FF-P1 (complete)
 
 - Objective: deliver searchable local transcription history, complete metadata
   and statistics, durable recovery, explicit retention, fail-closed deletion,
@@ -264,9 +264,10 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   warnings. All catalogs are structurally complete.
 - Artifact: 44,207,104-byte `freeflow.exe`, SHA-256
   `7806dc5077326d18deb9a502e143e8cace2f4f153764520ae233c97582195c3e`.
-- Result: local FF-P1 candidate gates pass; hosted native Windows/macOS,
-  provenance, and security jobs are pending at the candidate commit.
-- Commit SHA: recorded by the implementation commit containing this entry.
+- Hosted evidence: run `29692703288` passed native Windows and macOS
+  foundation jobs, provenance, and security at the exact candidate commit.
+- Result: FF-P1 is complete and FF-P2 is next.
+- Commit SHA: `20b03120c1cbe6b9633cdd47c4f2b11b588b73e5`.
 - Deviations or remaining work: none in FF-P1 implementation scope. The
   retained cross-platform interactive release matrices remain owned by FF-R2.
 
