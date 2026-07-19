@@ -1,6 +1,6 @@
 # FF-V6 onboarding, permissions, and autostart gate
 
-Status: **Local deterministic gate passed; hosted gate pending**
+Status: **Implementation gate passed on Windows and macOS**
 
 ## Implemented proof surface
 
@@ -46,8 +46,9 @@ cargo audit -f src-tauri/Cargo.lock
 scripts/check-foundation-provenance.sh
 ```
 
-Hosted Windows and macOS foundation, provenance, and security jobs must pass at
-the exact candidate commit.
+Hosted run `29690161596` passed Windows and macOS foundation, provenance, and
+security jobs at exact candidate commit
+`bcea051e8f3435eb927502d83fb2c14f7c6b091c`.
 
 Local candidate results on Windows x86_64:
 

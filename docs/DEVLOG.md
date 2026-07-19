@@ -17,7 +17,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-18 | FF-V3    | Complete    | Local-ASR raw/recovery path and evaluator; immutable hosted gate; retained Windows, Apple Silicon, and Intel public-corpus/resource/zero-network evidence                                       | 153/153 ordinary Rust tests with 2 live-model tests ignored; normal main CI `29672015509`; hosted live gate `29672022926`; all frozen WER/task/latency/RSS/network thresholds passed on all three runners                                                                               | `df5c23c7eb5d8c6d058ae8f695fb3584123b923a`; `a6c8adb2c40f6d594cbc6e5f13f53d6941b1c7a4`; `2158e5d7a8eeb16c95cbcadccc8407685a04a6bb`; `10b6744cef2ac41bfc4f7f8e6106b7f2f354abf5`; `f4d2a0cbaec389a987be1d03f3a8d8084f7799c9` | Revised FF-V3 gate passed. FF-V2 remains user-deferred; project-owned dictation corpus remains mandatory at the later release gate                                                              |
 | 2026-07-18 | FF-V4    | In progress | Target capture/security guard, direct-first insertion, clipboard/manual fallbacks, boundary formatting, paste-last, undo metadata, localized tray UI, frozen live matrix                        | 159/159 runnable Rust library tests passed with 2 ignored; Windows Cargo check; ESLint; service-boundary; Prettier; TypeScript; Vite build; 22/22 translation catalogs; hosted Windows/macOS/provenance/security run `29675125703` passed                                               | `5877aacea9aa2e9cb2be832cf5df2f77c981a2fb`                                                                                                                                                                                 | Live 100-attempt application matrices, clipboard preservation, secure-field refusal, and interactive Windows/macOS evidence remain open; FF-V5 has not begun                                    |
 | 2026-07-19 | FF-V5    | Complete    | Original status bar states/docking/accessibility, state-bearing tray controls, Hub keyboard navigation, 23 catalogs, retained live matrix                                                       | Frozen install; frontend/translation/build gates; 162 Rust tests; strict Clippy delta; no-bundle build; RustSec/provenance; hosted run `29680441253`                                                                                                                                    | `b02751dc4e0edb06ec0827dfc3fbcdb24e2d7d6d`; closeout `26fc961e23e97e5d358b21f619d4464c37cf02f7`                                                                                                                            | Retained live multi-monitor/scaling/full-screen/focus/drag/screen-reader matrix assigned to FF-R2                                                                                               |
-| 2026-07-19 | FF-V6    | In progress | Resumable onboarding, privacy promise, permission repair, model/completion separation, shortcut/autostart preferences, first-dictation proof, diagnostics, uninstall-data guidance, 23 catalogs | Frozen install; frontend/446-key translation/build gates; 168 Rust tests; strict Clippy delta; no-bundle release build; RustSec/provenance passed locally                                                                                                                               | Candidate commit pending                                                                                                                                                                                                   | Hosted Windows/macOS/provenance/security gate pending; retained signed-build live install/permissions/restart/upgrade/uninstall matrix assigned to FF-R2                                        |
+| 2026-07-19 | FF-V6    | Complete    | Resumable onboarding, privacy promise, permission repair, model/completion separation, shortcut/autostart preferences, first-dictation proof, diagnostics, uninstall-data guidance, 23 catalogs | Frozen install; frontend/446-key translation/build gates; 168 Rust tests; strict Clippy delta; no-bundle release build; RustSec/provenance; hosted run `29690161596` passed                                                                                                             | `bcea051e8f3435eb927502d83fb2c14f7c6b091c`                                                                                                                                                                                 | Retained signed-build live install/permissions/restart/upgrade/uninstall matrix assigned to FF-R2                                                                                               |
 
 ### 2026-07-18 — FF-G3
 
@@ -204,7 +204,7 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   assigned to FF-R2 by the 2026-07-19 PSPR consolidation. FF-V6 is next.
 - Commit SHA: `b02751dc4e0edb06ec0827dfc3fbcdb24e2d7d6d`.
 
-### 2026-07-19 — FF-V6 (candidate)
+### 2026-07-19 — FF-V6 (complete)
 
 - Objective: deliver original, resumable onboarding for the local/privacy
   promise, permissions, model choice, shortcut, launch at login, first
@@ -228,9 +228,12 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   eliminated by rerunning the entire suite under a project-scoped temp root.
 - Artifact: 44,121,088-byte `freeflow.exe`, SHA-256
   `69cac522fa3c4013285bfc37ecc2e27e68efbe2c71829335e5e5e5ede68edc54`.
-- Result: local candidate gate passed; hosted native Windows/macOS, provenance,
-  and security gate pending at the exact candidate commit.
-- Commit SHA: candidate commit pending.
+- Hosted evidence: run `29690161596` passed native Windows and macOS foundation
+  jobs, provenance, and RustSec at exact candidate commit
+  `bcea051e8f3435eb927502d83fb2c14f7c6b091c`.
+- Result: FF-V6 implementation slice complete. Milestone V implementation is
+  complete and FF-P1 is next.
+- Commit SHA: `bcea051e8f3435eb927502d83fb2c14f7c6b091c`.
 - Deviations or remaining work: the signed-build clean-install, deny/regrant,
   revoke/repair, restart, upgrade, launch-at-login, first-dictation, and
   uninstall-data matrix remains mandatory at FF-R2 under the approved
