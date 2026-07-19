@@ -1,6 +1,6 @@
 # FreeFlow Local Dictation Clean-Room PSPR
 
-Status: **Approved — STS active; FF-G1 through FF-G4 and FF-V1 through FF-V4 implementation slices complete; FF-V2 and FF-V4 live matrices retained for FF-R2; FF-V5 in progress**
+Status: **Approved — STS active; FF-G1 through FF-G4 and FF-V1 through FF-V5 implementation slices complete; FF-V2, FF-V4, and FF-V5 live matrices retained for FF-R2; FF-V6 in progress**
 Version: 1.5
 Date: 2026-07-19
 Canonical repository: `C:\Users\17076\Documents\FreeFlow`

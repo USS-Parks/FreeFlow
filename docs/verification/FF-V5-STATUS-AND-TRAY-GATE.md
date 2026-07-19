@@ -1,6 +1,8 @@
 # FF-V5 status bar and tray gate
 
-Status: **Implementation candidate — deterministic gates pass; hosted native verification pending**
+Status: **Implementation slice complete — deterministic and hosted native gates pass; interactive matrix retained at FF-R2**
+
+Candidate commit: `b02751dc4e0edb06ec0827dfc3fbcdb24e2d7d6d`
 
 ## Frozen behavior
 
@@ -35,3 +37,10 @@ focus preservation, drag and drag-cancel, restart persistence, keyboard tray
 operation, and screen-reader announcements on Windows and macOS. This retained
 interactive evidence is required before release under the PSPR's 2026-07-19
 consolidation.
+
+## Hosted native evidence
+
+GitHub Actions run
+[`29680441253`](https://github.com/USS-Parks/FreeFlow/actions/runs/29680441253)
+passed at the exact candidate commit. Native Windows and macOS foundation jobs,
+provenance, and RustSec all completed successfully.

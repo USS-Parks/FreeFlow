@@ -171,7 +171,7 @@ src-tauri/Cargo.toml`; ESLint over `src`; service-boundary checker; Prettier;
   matrix is an explicit FF-R2 release blocker. FF-V5 is next.
 - Commit SHA: recorded by the closeout commit containing this entry.
 
-### 2026-07-19 — FF-V5 (in progress)
+### 2026-07-19 — FF-V5 (complete)
 
 - Objective: Complete the original FreeFlow status bar and native tray/menu
   recovery surface with persistent work-area docking, accessible state
@@ -196,10 +196,11 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   upstream warnings. The final Windows release executable is 44,092,416 bytes
   with SHA-256
   `5241d495a565b346db33d756b8a8f085588a90f5d8f175f8a9b8f16fa27ea85c`.
-- Result: implementation candidate passes locally. Native hosted Windows/macOS
-  verification remains before prompt closeout; retained interactive evidence is
-  assigned to FF-R2 by the 2026-07-19 PSPR consolidation.
-- Commit SHA: recorded by the candidate commit containing this entry.
+- Hosted evidence: run `29680441253` passed native Windows and macOS foundation
+  jobs, provenance, and RustSec at the exact candidate commit.
+- Result: FF-V5 implementation slice complete. Retained interactive evidence is
+  assigned to FF-R2 by the 2026-07-19 PSPR consolidation. FF-V6 is next.
+- Commit SHA: `b02751dc4e0edb06ec0827dfc3fbcdb24e2d7d6d`.
 
 ## Entry template
 
