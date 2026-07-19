@@ -444,6 +444,28 @@
       "voiceActivityDetection": {
         "title": "音声区間検出 (VAD)",
         "description": "録音から無音部分を除去します。ストリーミング対応モデルはより長い音声検出区間を使用します。VAD を無効にすると音声をそのまま録音します。"
+      },
+      "voiceSnippets": {
+        "title": "Voice Snippets",
+        "description": "Expand a spoken trigger phrase into exact static text after transcription and optional post-processing.",
+        "name": "Snippet name",
+        "trigger": "Spoken trigger phrase",
+        "expansion": "Exact text to insert",
+        "add": "Add",
+        "save": "Save",
+        "cancel": "Cancel",
+        "search": "Search voice snippets",
+        "sort": "Sort voice snippets",
+        "sortUpdated": "Recently updated",
+        "sortName": "Name",
+        "sortTrigger": "Trigger phrase",
+        "exportJson": "Export JSON",
+        "importJson": "Import JSON",
+        "imported": "Imported {{count}} snippets",
+        "empty": "No voice snippets found.",
+        "edit": "Edit",
+        "delete": "Delete",
+        "deleteConfirm": "Delete this voice snippet?"
       }
     },
     "postProcessing": {

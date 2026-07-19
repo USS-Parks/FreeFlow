@@ -492,6 +492,16 @@ pub(crate) async fn process_transcription_output(
         post_processed_text = Some(final_text.clone());
     }
 
+    let snippet_manager = app.state::<Arc<crate::managers::snippets::SnippetManager>>();
+    match snippet_manager.expand(&final_text) {
+        Ok(expanded) if expanded != final_text => {
+            final_text = expanded.clone();
+            post_processed_text = Some(expanded);
+        }
+        Ok(_) => {}
+        Err(error) => error!("Failed to expand voice snippets: {error}"),
+    }
+
     ProcessedTranscription {
         final_text,
         post_processed_text,

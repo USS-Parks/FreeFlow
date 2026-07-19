@@ -78,9 +78,10 @@ pub const HISTORY_MIGRATIONS: &[ReversibleMigration] = &[
     },
 ];
 
-pub const PERSONALIZATION_MIGRATIONS: &[ReversibleMigration] = &[ReversibleMigration {
-    version: 1,
-    up_sql: "CREATE TABLE dictionary_entries (
+pub const PERSONALIZATION_MIGRATIONS: &[ReversibleMigration] = &[
+    ReversibleMigration {
+        version: 1,
+        up_sql: "CREATE TABLE dictionary_entries (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         spoken_form TEXT NOT NULL,
         replacement TEXT NOT NULL,
@@ -92,10 +93,28 @@ pub const PERSONALIZATION_MIGRATIONS: &[ReversibleMigration] = &[ReversibleMigra
         ON dictionary_entries(lower(spoken_form));
     CREATE INDEX dictionary_starred_updated_idx
         ON dictionary_entries(starred DESC, updated_at DESC);",
-    down_sql: "DROP INDEX IF EXISTS dictionary_starred_updated_idx;
+        down_sql: "DROP INDEX IF EXISTS dictionary_starred_updated_idx;
         DROP INDEX IF EXISTS dictionary_spoken_form_unique;
         DROP TABLE IF EXISTS dictionary_entries;",
-}];
+    },
+    ReversibleMigration {
+        version: 2,
+        up_sql: "CREATE TABLE snippets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            trigger_phrase TEXT NOT NULL,
+            expansion TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL
+        );
+        CREATE UNIQUE INDEX snippets_trigger_unique
+            ON snippets(lower(trigger_phrase));
+        CREATE INDEX snippets_updated_idx ON snippets(updated_at DESC);",
+        down_sql: "DROP INDEX IF EXISTS snippets_updated_idx;
+            DROP INDEX IF EXISTS snippets_trigger_unique;
+            DROP TABLE IF EXISTS snippets;",
+    },
+];
 
 pub struct MigrationRunner<'a> {
     migrations: &'a [ReversibleMigration],
@@ -337,7 +356,27 @@ mod tests {
                 [],
             )
             .expect("insert dictionary row");
+        connection
+            .execute(
+                "INSERT INTO snippets
+                 (name, trigger_phrase, expansion, created_at, updated_at)
+                 VALUES ('signature', 'insert signature', 'Regards', 1, 1)",
+                [],
+            )
+            .expect("insert snippet row");
+        assert_eq!(MigrationRunner::current_version(&connection).unwrap(), 2);
+        runner
+            .migrate_to(&mut connection, 1)
+            .expect("roll snippets back");
         assert_eq!(MigrationRunner::current_version(&connection).unwrap(), 1);
+        let snippets: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='snippets'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(snippets, 0);
         runner.migrate_to(&mut connection, 0).expect("roll back");
         assert_eq!(MigrationRunner::current_version(&connection).unwrap(), 0);
         let table_count: i64 = connection

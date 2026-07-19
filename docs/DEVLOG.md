@@ -304,6 +304,39 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Deviations or remaining work: none in FF-P2 implementation scope. The
   retained cross-platform interactive release matrices remain owned by FF-R2.
 
+### 2026-07-19 — FF-P3 (candidate)
+
+- Objective: deliver deterministic voice-triggered static expansions with
+  durable CRUD, search/sort, JSON transfer, conflict prevention, and exact
+  final-output integration.
+- Starting commit: `699db332b90502cb87b1ed6602a9550b92c313f1` on canonical
+  `main`.
+- Reuse classification: extension at the existing personalization SQLite,
+  Tauri manager/command/binding, shared transcription-output, Advanced settings,
+  and i18next seams; no new runtime dependency.
+- Files changed: personalization migration and snippet manager; typed commands
+  and generated bindings; final transcription and retry output integration;
+  snippet settings UI; 23 locale catalogs; behavior matrix; frozen FF-P3
+  evidence.
+- Verification commands: verified Bun 1.3.14 frozen install; ESLint and service
+  boundary; Prettier and Rustfmt; 501-key translation consistency; TypeScript
+  and production Vite build; full Rust tests; warnings-denied Clippy with only
+  the seven inherited lint classes allowed; optimized Tauri no-bundle build;
+  RustSec; provenance; diff checks.
+- Automated evidence: 187/187 runnable Rust library tests pass with the two
+  explicit 731 MB live-model tests ignored. Focused casing, punctuation,
+  boundary, repeat, overlap, Unicode, 4,000-character, duplicate, JSON transfer,
+  rollback, and reversible migration fixtures pass. RustSec reports no denied
+  vulnerability and 28 allowed upstream warnings. All catalogs are complete.
+- Artifact: 44,445,696-byte `freeflow.exe`, SHA-256
+  `34fa26e8bc387dd9319b2bbf12857678d0fb0df1ba9265e065de0086a0a4bf24`.
+- Hosted evidence: pending at the exact candidate commit.
+- Result: local FF-P3 implementation and gates pass; hosted candidate evidence
+  is the remaining closeout step.
+- Commit SHA: pending candidate commit.
+- Deviations or remaining work: none in FF-P3 implementation scope. The
+  retained cross-platform interactive release matrices remain owned by FF-R2.
+
 ## Entry template
 
 ### YYYY-MM-DD — FF-XX

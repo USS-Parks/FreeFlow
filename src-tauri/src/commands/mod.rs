@@ -2,6 +2,7 @@ pub mod audio;
 pub mod dictionary;
 pub mod history;
 pub mod models;
+pub mod snippets;
 pub mod transcription;
 
 use crate::settings::{get_settings, write_settings, AppSettings, LogLevel, OnboardingStage};

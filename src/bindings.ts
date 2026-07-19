@@ -1313,6 +1313,90 @@ export const commands = {
   async getDictionaryEngineSupport(): Promise<DictionaryEngineSupport> {
     return await TAURI_INVOKE("get_dictionary_engine_support");
   },
+  async getSnippets(
+    query: string | null,
+    sort: SnippetSort | null,
+  ): Promise<Result<Snippet[], string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("get_snippets", { query, sort }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async createSnippet(
+    name: string,
+    triggerPhrase: string,
+    expansion: string,
+  ): Promise<Result<Snippet, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("create_snippet", {
+          name,
+          triggerPhrase,
+          expansion,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async updateSnippet(
+    id: number,
+    name: string,
+    triggerPhrase: string,
+    expansion: string,
+  ): Promise<Result<Snippet, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("update_snippet", {
+          id,
+          name,
+          triggerPhrase,
+          expansion,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async deleteSnippet(id: number): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("delete_snippet", { id }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async exportSnippetsJson(): Promise<Result<string, string>> {
+    try {
+      return { status: "ok", data: await TAURI_INVOKE("export_snippets_json") };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async importSnippetsJson(json: string): Promise<Result<number, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("import_snippets_json", { json }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async getHistoryEntries(
     cursor: number | null,
     limit: number | null,
@@ -1835,6 +1919,15 @@ export type ShortcutBinding = {
   default_binding: string;
   current_binding: string;
 };
+export type Snippet = {
+  id: number;
+  name: string;
+  trigger_phrase: string;
+  expansion: string;
+  created_at: number;
+  updated_at: number;
+};
+export type SnippetSort = "updated" | "name" | "trigger_phrase";
 export type SoundTheme = "marimba" | "pop" | "custom";
 /**
  * Phase of the streaming overlay card, emitted to drive its UI state.

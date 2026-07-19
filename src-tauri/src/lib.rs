@@ -36,6 +36,7 @@ use managers::audio::AudioRecordingManager;
 use managers::dictionary::DictionaryManager;
 use managers::history::HistoryManager;
 use managers::model::ModelManager;
+use managers::snippets::SnippetManager;
 use managers::transcription::TranscriptionManager;
 #[cfg(unix)]
 use signal_hook::consts::{SIGUSR1, SIGUSR2};
@@ -176,6 +177,8 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     let dictionary_manager = Arc::new(
         DictionaryManager::new(app_handle).expect("Failed to initialize dictionary manager"),
     );
+    let snippet_manager =
+        Arc::new(SnippetManager::new(app_handle).expect("Failed to initialize snippet manager"));
 
     // Initialize the transcribe-cpp native backend (logging + backend module
     // registration) once, before any whisper model is loaded.
@@ -190,6 +193,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
     app_handle.manage(dictionary_manager.clone());
+    app_handle.manage(snippet_manager.clone());
     app_handle.manage(clipboard::InsertionState::new());
     app_handle.manage(tray::CurrentTrayIconState::new());
 
@@ -1020,6 +1024,12 @@ pub fn run(cli_args: CliArgs) {
             commands::dictionary::export_dictionary_csv,
             commands::dictionary::import_dictionary_csv,
             commands::dictionary::get_dictionary_engine_support,
+            commands::snippets::get_snippets,
+            commands::snippets::create_snippet,
+            commands::snippets::update_snippet,
+            commands::snippets::delete_snippet,
+            commands::snippets::export_snippets_json,
+            commands::snippets::import_snippets_json,
             commands::history::get_history_entries,
             commands::history::toggle_history_entry_saved,
             commands::history::get_audio_file_path,
