@@ -1,5 +1,6 @@
 {
   "tray": {
+    "pasteLastTranscript": "Paste Last Transcript",
     "settings": "Settings...",
     "checkUpdates": "Check for Updates...",
     "copyLastTranscript": "Copy Last Transcript",

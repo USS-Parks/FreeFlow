@@ -22,6 +22,17 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
       const mod = osType === "macos" ? "Cmd" : "Ctrl";
 
       const options = [
+        ...(osType === "windows" || osType === "macos"
+          ? [
+              {
+                value: "reliable",
+                label: `${t("settings.advanced.pasteMethod.options.direct")} → ${t(
+                  "settings.advanced.pasteMethod.options.clipboard",
+                  { modifier: mod },
+                )}`,
+              },
+            ]
+          : []),
         {
           value: "ctrl_v",
           label: t("settings.advanced.pasteMethod.options.clipboard", {
@@ -68,7 +79,7 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
     };
 
     const selectedMethod = (getSetting("paste_method") ||
-      "ctrl_v") as PasteMethod;
+      (osType === "linux" ? "direct" : "reliable")) as PasteMethod;
     const externalScriptPath = getSetting("external_script_path") || "";
 
     const pasteMethodOptions = getPasteMethodOptions(osType);

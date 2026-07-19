@@ -786,6 +786,7 @@ pub fn change_paste_delay_after_ms_setting(app: AppHandle, ms: u64) -> Result<()
 pub fn change_paste_method_setting(app: AppHandle, method: String) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     let parsed = match method.as_str() {
+        "reliable" => PasteMethod::Reliable,
         "ctrl_v" => PasteMethod::CtrlV,
         "direct" => PasteMethod::Direct,
         "none" => PasteMethod::None,
@@ -793,8 +794,8 @@ pub fn change_paste_method_setting(app: AppHandle, method: String) -> Result<(),
         "ctrl_shift_v" => PasteMethod::CtrlShiftV,
         "external_script" => PasteMethod::ExternalScript,
         other => {
-            warn!("Invalid paste method '{}', defaulting to ctrl_v", other);
-            PasteMethod::CtrlV
+            warn!("Invalid paste method '{}', defaulting to reliable", other);
+            PasteMethod::Reliable
         }
     };
     settings.paste_method = parsed;

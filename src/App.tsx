@@ -21,6 +21,13 @@ import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 
+type ManualInsertionEvent = {
+  reason: string;
+  text: string;
+  application_id?: string | null;
+  window_title?: string | null;
+};
+
 const renderSettingsContent = (section: SidebarSection) => {
   const ActiveComponent =
     SECTIONS_CONFIG[section]?.component || SECTIONS_CONFIG.general.component;
@@ -148,6 +155,31 @@ function App() {
         description: t("errors.pasteFailed"),
       });
     });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
+  useEffect(() => {
+    const unlisten = listen<ManualInsertionEvent>(
+      "insertion-manual-required",
+      (event) => {
+        toast.warning(t("errors.pasteFailedTitle"), {
+          description: t("errors.pasteFailed"),
+          action: {
+            label: t("common.copy"),
+            onClick: async () => {
+              const result = await commands.copyTextToClipboard(
+                event.payload.text,
+              );
+              if (result.status === "error") {
+                toast.error(t("errors.pasteFailedTitle"));
+              }
+            },
+          },
+        });
+      },
+    );
     return () => {
       unlisten.then((fn) => fn());
     };

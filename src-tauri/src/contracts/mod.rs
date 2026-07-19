@@ -200,6 +200,16 @@ pub enum InsertionMethod {
 pub struct InsertionOutcome {
     pub method: InsertionMethod,
     pub inserted: bool,
+    pub manual_reason: Option<String>,
+    pub undo: Option<UndoMetadata>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UndoMetadata {
+    pub target_id: String,
+    pub inserted_text_sha256: String,
+    pub inserted_chars: usize,
+    pub inserted_at_unix_ms: u64,
 }
 
 pub trait TextInserter: VersionedContract {
@@ -216,6 +226,9 @@ pub struct PlatformContext {
     pub window_title: Option<String>,
     pub selected_text: Option<String>,
     pub secure_field: bool,
+    pub secure_field_known: bool,
+    pub target_id: Option<String>,
+    pub preceding_text: Option<String>,
 }
 
 pub trait PlatformContextProvider: VersionedContract {

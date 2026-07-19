@@ -20,7 +20,7 @@ use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::future::Future;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
 use tauri::{AppHandle, Emitter};
@@ -64,6 +64,7 @@ pub trait ShortcutAction: Send + Sync {
 // Transcribe Action
 struct TranscribeAction {
     post_process: bool,
+    targets: Mutex<HashMap<String, crate::contracts::PlatformContext>>,
 }
 
 /// Field name for structured output JSON schema
@@ -507,6 +508,10 @@ impl ShortcutAction for TranscribeAction {
     ) {
         let start_time = Instant::now();
         debug!("TranscribeAction::start called for binding: {}", binding_id);
+        let target = crate::platform_context::capture_active_target();
+        if let Ok(mut targets) = self.targets.lock() {
+            targets.insert(binding_id.to_string(), target);
+        }
 
         // Load model in the background
         let tm = app.state::<Arc<TranscriptionManager>>();
@@ -639,6 +644,9 @@ impl ShortcutAction for TranscribeAction {
             // Dynamically register the cancel shortcut in a separate task to avoid deadlock
             shortcut::register_cancel_shortcut(app);
         } else {
+            if let Ok(mut targets) = self.targets.lock() {
+                targets.remove(&binding_id);
+            }
             // Starting failed (for example due to blocked microphone permissions).
             // Revert UI state so we don't stay stuck in the recording overlay.
             tm.cancel_stream();
@@ -681,6 +689,11 @@ impl ShortcutAction for TranscribeAction {
         let rm = Arc::clone(&app.state::<Arc<AudioRecordingManager>>());
         let tm = Arc::clone(&app.state::<Arc<TranscriptionManager>>());
         let hm = Arc::clone(&app.state::<Arc<HistoryManager>>());
+        let captured_target = self
+            .targets
+            .lock()
+            .ok()
+            .and_then(|mut targets| targets.remove(binding_id));
 
         change_tray_icon(app, TrayIconState::Transcribing);
         // Stop should give immediate visual feedback. Live streaming can keep
@@ -933,10 +946,21 @@ impl ShortcutAction for TranscribeAction {
                                         return;
                                     }
 
-                                    match utils::paste(final_text, ah_clone.clone()) {
-                                        Ok(()) => debug!(
+                                    match utils::paste(
+                                        final_text,
+                                        ah_clone.clone(),
+                                        captured_target,
+                                    ) {
+                                        Ok(outcome) if outcome.inserted => debug!(
                                             "Text pasted successfully in {:?}",
                                             paste_time.elapsed()
+                                        ),
+                                        Ok(outcome) if outcome.manual_reason.is_none() => {
+                                            debug!("Automatic insertion is disabled by settings")
+                                        }
+                                        Ok(outcome) => warn!(
+                                            "Automatic insertion deferred to manual recovery: {}",
+                                            outcome.manual_reason.as_deref().unwrap_or("unknown")
                                         ),
                                         Err(e) => {
                                             error!("Failed to paste transcription: {}", e);
@@ -1067,11 +1091,15 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
         "transcribe".to_string(),
         Arc::new(TranscribeAction {
             post_process: false,
+            targets: Mutex::new(HashMap::new()),
         }) as Arc<dyn ShortcutAction>,
     );
     map.insert(
         "transcribe_with_post_process".to_string(),
-        Arc::new(TranscribeAction { post_process: true }) as Arc<dyn ShortcutAction>,
+        Arc::new(TranscribeAction {
+            post_process: true,
+            targets: Mutex::new(HashMap::new()),
+        }) as Arc<dyn ShortcutAction>,
     );
     map.insert(
         "cancel".to_string(),

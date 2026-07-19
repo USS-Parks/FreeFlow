@@ -1,5 +1,6 @@
 {
   "tray": {
+    "pasteLastTranscript": "لصق آخر نص تم تفريغه",
     "settings": "...الإعدادات",
     "checkUpdates": "...التحقق من وجود تحديثات",
     "copyLastTranscript": "نسخ آخر نص تم تفريغه",

@@ -15,6 +15,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-18 | FF-V1    | Complete    | Immutable Parakeet manifest, consent UI, downloader/manual installer, receipt/tamper integrity, model lifecycle integration, ADR-0003, notices, 23 locale catalogs, macOS live workflow         | Frozen Bun install; lint; format; frontend build; 137/137 ordinary Rust tests; Windows manual/direct live tests; Apple Silicon and Intel direct-download/install/load/session tests; full hosted Windows/macOS/provenance CI; translation, RustSec, actionlint, Windows no-bundle build | `ccac099de6b3cb86fdbfdea1fc57d05a5b8078b2`; `0baeb5320d0128fa9bb7146c69905d498f605d46`; `a1d13f8befbf8d672e59d406142231a735ce71e7`; `5d269096ae9c976719f1e7aaebc3c7a8fc8bd15b`                                             | Closeout Windows artifact: 43,653,120 bytes, SHA-256 `ab6b8750088055dfd098e62451dd6e8c384dfc14d33a9276dddfcf537020dce2`; macOS live run `29649911938` and full CI run `29650991927` passed      |
 | 2026-07-18 | FF-V2    | In progress | Truthful microphone selection/diagnostics, typed dictation lifecycle, atomic retryable capture/recovery, bundled pinned Silero V4, localized errors, live verifier, ADR-0004 and live checklist | 145/145 ordinary Rust tests; 22/22 translation catalogs; Windows production-path default-mic verifier captured 50/50 cycles and cancellation returned idle                                                                                                                              | `af7a3b2746737eec869344cbb5f2387b0d55ef75`                                                                                                                                                                                 | On-demand mic-ready p95 was 504.72 ms and is not misrepresented as the 150 ms feedback gate; interactive feedback/first-word/hot-plug/contention/sleep-wake and macOS live evidence remain open |
 | 2026-07-18 | FF-V3    | Complete    | Local-ASR raw/recovery path and evaluator; immutable hosted gate; retained Windows, Apple Silicon, and Intel public-corpus/resource/zero-network evidence                                       | 153/153 ordinary Rust tests with 2 live-model tests ignored; normal main CI `29672015509`; hosted live gate `29672022926`; all frozen WER/task/latency/RSS/network thresholds passed on all three runners                                                                               | `df5c23c7eb5d8c6d058ae8f695fb3584123b923a`; `a6c8adb2c40f6d594cbc6e5f13f53d6941b1c7a4`; `2158e5d7a8eeb16c95cbcadccc8407685a04a6bb`; `10b6744cef2ac41bfc4f7f8e6106b7f2f354abf5`; `f4d2a0cbaec389a987be1d03f3a8d8084f7799c9` | Revised FF-V3 gate passed. FF-V2 remains user-deferred; project-owned dictation corpus remains mandatory at the later release gate                                                              |
+| 2026-07-18 | FF-V4    | In progress | Target capture/security guard, direct-first insertion, clipboard/manual fallbacks, boundary formatting, paste-last, undo metadata, localized tray UI, frozen live matrix                        | 159/159 runnable Rust library tests passed with 2 ignored; Windows Cargo check; ESLint; service-boundary; Prettier; TypeScript; Vite build; 22/22 translation catalogs                                                                                                                  | Pending candidate commit                                                                                                                                                                                                   | Live 100-attempt application matrices, clipboard preservation, secure-field refusal, and macOS compilation/live evidence remain open; FF-V5 has not begun                                       |
 
 ### 2026-07-18 — FF-G3
 
@@ -105,6 +106,47 @@ The log is append-only once STS execution begins. A prompt is not complete until
 - Result: revised FF-V3 gate complete. Full evidence: `docs/verification/FF-V3-HOSTED-CROSS-PLATFORM-2026-07-18.md` and `docs/verification/evidence/ff-v3/hosted-cross-platform-2026-07-18.json`.
 - Commit SHAs: workflow `a6c8adb2c40f6d594cbc6e5f13f53d6941b1c7a4`; native macOS RSS `2158e5d7a8eeb16c95cbcadccc8407685a04a6bb`; Windows runner pin `2f68c4d089288bb62cf153587dc50aadf057acab`; deterministic Vulkan provisioning and passing gate head `10b6744cef2ac41bfc4f7f8e6106b7f2f354abf5`; retained evidence closeout `f4d2a0cbaec389a987be1d03f3a8d8084f7799c9`.
 - Remaining work: consented project-owned dictation corpus evidence remains mandatory at the later release gate. FF-V2 remains explicitly user-deferred rather than passed. FF-V4 is now next in the roster.
+
+### 2026-07-18 — FF-V4 (in progress)
+
+- Objective: Implement reliable, target-bound insertion with direct delivery,
+  lossless clipboard fallback, explicit manual recovery, boundary formatting,
+  paste-last, and safe undo metadata.
+- Starting commit: `9bf7583266eecbd8fa053c58db6d186bf78152f9` on canonical `main`.
+- Reuse classification: extension at the imported Enigo, clipboard, shortcut,
+  tray, settings, history, Tauri event, and translation seams; new Windows UI
+  Automation and macOS Accessibility target capture plus deterministic insertion
+  policy and evidence specification.
+- Files changed: insertion/platform contracts; platform target capture;
+  clipboard/insertion service; transcription action target lifecycle; settings
+  and generated binding; tray paste-last action; frontend manual-copy recovery;
+  23 locale catalogs; FF-V4 live gate; PSPR and DEVLOG.
+- Verification commands: `cargo fmt`; `cargo test --manifest-path
+src-tauri/Cargo.toml --lib`; `cargo check --manifest-path
+src-tauri/Cargo.toml`; ESLint over `src`; service-boundary checker; Prettier;
+  TypeScript compiler; Vite production build; translation consistency checker;
+  `git diff --check`.
+- Automated evidence: 159/159 runnable Rust library tests passed with two
+  existing live-model tests ignored. Security-unknown, secure-field, changed
+  target, boundary, clipboard-restoration error, macOS plain-text format
+  allowlist, and content-free undo metadata tests pass. Windows Cargo check,
+  ESLint, service boundary, formatting, TypeScript, production frontend build,
+  all 22 non-English translation catalogs, provenance, and the Windows
+  no-bundle release build and final optimized rebuild pass. The final release
+  executable is 43,650,560 bytes with SHA-256
+  `ce0f9f931084e5b7e25c0222cc57f8ff2eb926670b9a1276a6d3659f3902b899`.
+- Live-system evidence: pending. Local Windows input automation was deliberately
+  not run because it would take over the user's foreground session. Local macOS
+  cross-compilation stops in the dependency graph before FreeFlow code because
+  this Windows host has no Apple C compiler; hosted/native macOS evidence is
+  required rather than inferred.
+- Result: implementation candidate structurally passes; FF-V4 remains in
+  progress.
+- Commit SHA: pending candidate commit.
+- Deviations or remaining work: execute the frozen 100-attempt Windows and
+  macOS application matrices, prove all clipboard/security/recovery invariants,
+  retain exact platform evidence, and only then close FF-V4. FF-V5 has not
+  started.
 
 ## Entry template
 

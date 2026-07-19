@@ -1615,6 +1615,7 @@ export type OverlayPosition = "top" | "bottom";
 export type OverlayStyle = "none" | "minimal" | "live";
 export type PaginatedHistory = { entries: HistoryEntry[]; has_more: boolean };
 export type PasteMethod =
+  | "reliable"
   | "ctrl_v"
   | "direct"
   | "none"

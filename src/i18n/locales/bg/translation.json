@@ -1,5 +1,6 @@
 {
   "tray": {
+    "pasteLastTranscript": "Поставяне на последния транскрипт",
     "settings": "Настройки...",
     "checkUpdates": "Проверка за актуализации...",
     "copyLastTranscript": "Копиране на последния транскрипт",

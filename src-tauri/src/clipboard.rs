@@ -1,16 +1,29 @@
+use crate::contracts::{InsertionMethod, InsertionOutcome, PlatformContext, UndoMetadata};
 use crate::input::{self, EnigoState};
+use crate::platform_context::{capture_active_target, same_target};
 #[cfg(target_os = "linux")]
 use crate::settings::TypingTool;
 use crate::settings::{get_settings, AutoSubmitKey, ClipboardHandling, PasteMethod};
 use enigo::{Direction, Enigo, Key, Keyboard};
-use log::info;
+use log::{info, warn};
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 use std::process::Command;
+use std::sync::Mutex;
 use std::time::Duration;
-use tauri::{AppHandle, Manager};
+use std::time::{SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
 #[cfg(target_os = "linux")]
 use crate::utils::{is_kde_wayland, is_wayland};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ClipboardFormatState {
+    Empty,
+    PlainText,
+    Unsafe,
+}
 
 /// Pastes text using the clipboard: saves current content, writes text, sends paste keystroke, restores clipboard.
 fn paste_via_clipboard(
@@ -21,8 +34,20 @@ fn paste_via_clipboard(
     paste_delay_ms: u64,
     paste_delay_after_ms: u64,
 ) -> Result<(), String> {
+    let format_state = clipboard_format_state()?;
+    if format_state == ClipboardFormatState::Unsafe {
+        return Err("clipboard_contains_non_text_formats".into());
+    }
     let clipboard = app_handle.clipboard();
-    let clipboard_content = clipboard.read_text().unwrap_or_default();
+    let clipboard_content = match format_state {
+        ClipboardFormatState::Empty => None,
+        ClipboardFormatState::PlainText => Some(
+            clipboard
+                .read_text()
+                .map_err(|e| format!("Failed to snapshot clipboard text: {e}"))?,
+        ),
+        ClipboardFormatState::Unsafe => unreachable!(),
+    };
 
     // Write text to clipboard first
     // On Wayland, prefer wl-copy for better compatibility (especially with umlauts)
@@ -43,40 +68,71 @@ fn paste_via_clipboard(
 
     write_result?;
 
-    std::thread::sleep(Duration::from_millis(paste_delay_ms));
+    let paste_result = (|| {
+        std::thread::sleep(Duration::from_millis(paste_delay_ms));
 
-    // Send paste key combo
-    #[cfg(target_os = "linux")]
-    let key_combo_sent = try_send_key_combo_linux(paste_method)?;
+        // Send paste key combo
+        #[cfg(target_os = "linux")]
+        let key_combo_sent = try_send_key_combo_linux(paste_method)?;
 
-    #[cfg(not(target_os = "linux"))]
-    let key_combo_sent = false;
+        #[cfg(not(target_os = "linux"))]
+        let key_combo_sent = false;
 
-    // Fall back to enigo if no native tool handled it
-    if !key_combo_sent {
-        match paste_method {
-            PasteMethod::CtrlV => input::send_paste_ctrl_v(enigo)?,
-            PasteMethod::CtrlShiftV => input::send_paste_ctrl_shift_v(enigo)?,
-            PasteMethod::ShiftInsert => input::send_paste_shift_insert(enigo)?,
-            _ => return Err("Invalid paste method for clipboard paste".into()),
+        // Fall back to enigo if no native tool handled it
+        if !key_combo_sent {
+            match paste_method {
+                PasteMethod::CtrlV => input::send_paste_ctrl_v(enigo)?,
+                PasteMethod::CtrlShiftV => input::send_paste_ctrl_shift_v(enigo)?,
+                PasteMethod::ShiftInsert => input::send_paste_shift_insert(enigo)?,
+                _ => return Err("Invalid paste method for clipboard paste".into()),
+            }
         }
-    }
 
-    std::thread::sleep(Duration::from_millis(paste_delay_after_ms));
+        std::thread::sleep(Duration::from_millis(paste_delay_after_ms));
+        Ok(())
+    })();
 
     // Restore original clipboard content
     // On Wayland, prefer wl-copy for better compatibility
     #[cfg(target_os = "linux")]
-    if is_wayland() && is_wl_copy_available() {
-        let _ = write_clipboard_via_wl_copy(&clipboard_content);
+    let restore_result = if let Some(clipboard_content) = clipboard_content.as_deref() {
+        if is_wayland() && is_wl_copy_available() {
+            write_clipboard_via_wl_copy(clipboard_content)
+        } else {
+            clipboard
+                .write_text(clipboard_content)
+                .map_err(|e| format!("Failed to restore clipboard text: {e}"))
+        }
     } else {
-        let _ = clipboard.write_text(&clipboard_content);
-    }
+        clipboard
+            .clear()
+            .map_err(|e| format!("Failed to restore empty clipboard: {e}"))
+    };
 
     #[cfg(not(target_os = "linux"))]
-    let _ = clipboard.write_text(&clipboard_content);
+    let restore_result = if let Some(clipboard_content) = clipboard_content.as_deref() {
+        clipboard
+            .write_text(clipboard_content)
+            .map_err(|e| format!("Failed to restore clipboard text: {e}"))
+    } else {
+        clipboard
+            .clear()
+            .map_err(|e| format!("Failed to restore empty clipboard: {e}"))
+    };
 
-    Ok(())
+    combine_clipboard_results(paste_result, restore_result)
+}
+
+fn combine_clipboard_results(
+    paste_result: Result<(), String>,
+    restore_result: Result<(), String>,
+) -> Result<(), String> {
+    match (paste_result, restore_result) {
+        (Ok(()), Ok(())) => Ok(()),
+        (Err(paste), Ok(())) => Err(paste),
+        (Ok(()), Err(restore)) => Err(restore),
+        (Err(paste), Err(restore)) => Err(format!("{paste}; {restore}")),
+    }
 }
 
 /// Attempts to send a key combination using Linux-native tools.
@@ -542,6 +598,256 @@ fn paste_direct(
     input::paste_text_direct(enigo, text)
 }
 
+#[cfg(target_os = "windows")]
+fn clipboard_format_state() -> Result<ClipboardFormatState, String> {
+    use windows::Win32::Foundation::{GetLastError, ERROR_SUCCESS};
+    use windows::Win32::System::DataExchange::{
+        CloseClipboard, EnumClipboardFormats, OpenClipboard,
+    };
+
+    // Text formats plus the locale metadata Windows attaches to text. Rich
+    // text, HTML, images, and CF_HDROP file references are deliberately refused
+    // so a fallback can never flatten or destroy them during restoration.
+    const TEXT_FORMATS: [u32; 4] = [1, 7, 13, 16];
+
+    unsafe {
+        OpenClipboard(None).map_err(|e| format!("Failed to inspect clipboard formats: {e}"))?;
+        let result = (|| -> Result<ClipboardFormatState, String> {
+            let mut format = 0_u32;
+            let mut found = false;
+            loop {
+                format = EnumClipboardFormats(format);
+                if format == 0 {
+                    let error = GetLastError();
+                    if error != ERROR_SUCCESS {
+                        return Err(format!(
+                            "Failed to enumerate clipboard formats: Windows error {}",
+                            error.0
+                        ));
+                    }
+                    return Ok(if found {
+                        ClipboardFormatState::PlainText
+                    } else {
+                        ClipboardFormatState::Empty
+                    });
+                }
+                found = true;
+                if !TEXT_FORMATS.contains(&format) {
+                    return Ok(ClipboardFormatState::Unsafe);
+                }
+            }
+        })();
+        CloseClipboard().map_err(|e| format!("Failed to close clipboard inspection: {e}"))?;
+        result
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn clipboard_format_state() -> Result<ClipboardFormatState, String> {
+    let output = Command::new("osascript")
+        .args(["-e", "clipboard info"])
+        .output()
+        .map_err(|e| format!("Failed to inspect macOS pasteboard formats: {e}"))?;
+    if !output.status.success() {
+        return Err("Failed to inspect macOS pasteboard formats".into());
+    }
+    Ok(macos_clipboard_description_state(&String::from_utf8_lossy(
+        &output.stdout,
+    )))
+}
+
+// AppleScript reports pasteboard representations as class/type names and byte
+// counts. Permit only the words used by its plain-text representations. Any
+// richer or unfamiliar type fails closed because the clipboard plugin can only
+// snapshot and restore text.
+#[cfg(any(target_os = "macos", test))]
+fn macos_clipboard_description_state(description: &str) -> ClipboardFormatState {
+    const PLAIN_TEXT_WORDS: [&str; 8] = [
+        "class",
+        "external",
+        "representation",
+        "string",
+        "text",
+        "unicode",
+        "ut",
+        "utf",
+    ];
+
+    let description = description.trim();
+    if description.is_empty() || description == "{}" {
+        return ClipboardFormatState::Empty;
+    }
+    if description
+        .to_ascii_lowercase()
+        .split(|character: char| !character.is_ascii_alphabetic())
+        .filter(|word| !word.is_empty())
+        .all(|word| PLAIN_TEXT_WORDS.contains(&word))
+    {
+        ClipboardFormatState::PlainText
+    } else {
+        ClipboardFormatState::Unsafe
+    }
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+fn clipboard_format_state() -> Result<ClipboardFormatState, String> {
+    Ok(ClipboardFormatState::PlainText)
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct ManualInsertionEvent {
+    pub reason: String,
+    pub text: String,
+    pub application_id: Option<String>,
+    pub window_title: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct InsertionCompletedEvent {
+    pub method: String,
+    pub application_id: Option<String>,
+    pub window_title: Option<String>,
+    pub undo: UndoMetadataEvent,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct UndoMetadataEvent {
+    pub target_id: String,
+    pub inserted_text_sha256: String,
+    pub inserted_chars: usize,
+    pub inserted_at_unix_ms: u64,
+}
+
+impl From<&UndoMetadata> for UndoMetadataEvent {
+    fn from(value: &UndoMetadata) -> Self {
+        Self {
+            target_id: value.target_id.clone(),
+            inserted_text_sha256: value.inserted_text_sha256.clone(),
+            inserted_chars: value.inserted_chars,
+            inserted_at_unix_ms: value.inserted_at_unix_ms,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct InsertionState(pub Mutex<Option<UndoMetadata>>);
+
+impl InsertionState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+fn insertion_block_reason(
+    captured: &PlatformContext,
+    current: &PlatformContext,
+) -> Option<&'static str> {
+    if !captured.secure_field_known || !current.secure_field_known {
+        return Some("target_security_unknown");
+    }
+    if captured.secure_field || current.secure_field {
+        return Some("secure_field");
+    }
+    if !same_target(captured, current) {
+        return Some("target_changed");
+    }
+    None
+}
+
+fn lower_sentence_initial(text: &str) -> String {
+    let mut chars = text.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    let Some(second) = chars.clone().next() else {
+        return text.to_string();
+    };
+    if first.is_uppercase() && second.is_lowercase() {
+        first.to_lowercase().chain(chars).collect()
+    } else {
+        text.to_string()
+    }
+}
+
+fn prepare_text_for_boundary(
+    text: &str,
+    preceding_text: Option<&str>,
+    append_trailing_space: bool,
+) -> String {
+    let mut prepared = text.trim().to_string();
+    if prepared.is_empty() {
+        return prepared;
+    }
+
+    if let Some(preceding) = preceding_text.filter(|value| !value.is_empty()) {
+        let immediate = preceding.chars().next_back();
+        let semantic = preceding
+            .chars()
+            .rev()
+            .find(|character| !character.is_whitespace());
+        let sentence_boundary = semantic
+            .map(|character| matches!(character, '.' | '!' | '?' | '\n' | '\r'))
+            .unwrap_or(true);
+        if !sentence_boundary {
+            prepared = lower_sentence_initial(&prepared);
+        }
+        if immediate.is_some_and(|character| !character.is_whitespace())
+            && prepared
+                .chars()
+                .next()
+                .is_some_and(|character| character.is_alphanumeric())
+        {
+            prepared.insert(0, ' ');
+        }
+    }
+
+    if append_trailing_space {
+        prepared.push(' ');
+    }
+    prepared
+}
+
+fn manual_outcome(reason: impl Into<String>) -> InsertionOutcome {
+    InsertionOutcome {
+        method: InsertionMethod::ManualCopy,
+        inserted: false,
+        manual_reason: Some(reason.into()),
+        undo: None,
+    }
+}
+
+fn skipped_outcome() -> InsertionOutcome {
+    InsertionOutcome {
+        method: InsertionMethod::ManualCopy,
+        inserted: false,
+        manual_reason: None,
+        undo: None,
+    }
+}
+
+fn success_outcome(
+    method: InsertionMethod,
+    text: &str,
+    target: &PlatformContext,
+) -> InsertionOutcome {
+    let target_id = target.target_id.clone().unwrap_or_default();
+    let undo = UndoMetadata {
+        target_id,
+        inserted_text_sha256: format!("{:x}", Sha256::digest(text.as_bytes())),
+        inserted_chars: text.chars().count(),
+        inserted_at_unix_ms: SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64,
+    };
+    InsertionOutcome {
+        method,
+        inserted: true,
+        manual_reason: None,
+        undo: Some(undo),
+    }
+}
+
 fn send_return_key(enigo: &mut Enigo, key_type: AutoSubmitKey) -> Result<(), String> {
     match key_type {
         AutoSubmitKey::Enter => {
@@ -589,85 +895,186 @@ fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool
     auto_submit && paste_method != PasteMethod::None
 }
 
-pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
+pub fn paste(
+    text: String,
+    app_handle: AppHandle,
+    captured_target: Option<PlatformContext>,
+) -> Result<InsertionOutcome, String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
     let paste_delay_ms = settings.paste_delay_ms;
     let paste_delay_after_ms = settings.paste_delay_after_ms;
 
-    // Append trailing space if setting is enabled
-    let text = if settings.append_trailing_space {
-        format!("{} ", text)
-    } else {
-        text
-    };
+    let current_target = capture_active_target();
+    let captured_target = captured_target.unwrap_or_else(|| current_target.clone());
+    let block_reason = insertion_block_reason(&captured_target, &current_target);
+    let text = prepare_text_for_boundary(
+        &text,
+        current_target.preceding_text.as_deref(),
+        settings.append_trailing_space,
+    );
 
     info!(
         "Using paste method: {:?}, delay before: {}ms, delay after: {}ms",
         paste_method, paste_delay_ms, paste_delay_after_ms
     );
 
-    // Get the managed Enigo instance
-    let enigo_state = app_handle
-        .try_state::<EnigoState>()
-        .ok_or("Enigo state not initialized")?;
-    let mut enigo = enigo_state
-        .0
-        .lock()
-        .map_err(|e| format!("Failed to lock Enigo: {}", e))?;
+    let outcome = if let Some(reason) = block_reason {
+        manual_outcome(reason)
+    } else if text.is_empty() {
+        manual_outcome("empty_text")
+    } else if paste_method == PasteMethod::None {
+        info!("PasteMethod::None selected - skipping paste action");
+        skipped_outcome()
+    } else if let Some(enigo_state) = app_handle.try_state::<EnigoState>() {
+        match enigo_state.0.lock() {
+            Ok(mut enigo) => match paste_method {
+                PasteMethod::Reliable => {
+                    let direct = paste_direct(
+                        &mut enigo,
+                        &text,
+                        #[cfg(target_os = "linux")]
+                        settings.typing_tool,
+                    );
+                    match direct {
+                        Ok(()) => success_outcome(InsertionMethod::Direct, &text, &current_target),
+                        Err(direct_error) => {
+                            warn!("Direct insertion failed; trying clipboard fallback: {direct_error}");
+                            match paste_via_clipboard(
+                                &mut enigo,
+                                &text,
+                                &app_handle,
+                                &PasteMethod::CtrlV,
+                                paste_delay_ms,
+                                paste_delay_after_ms,
+                            ) {
+                                Ok(()) => success_outcome(
+                                    InsertionMethod::Clipboard,
+                                    &text,
+                                    &current_target,
+                                ),
+                                Err(clipboard_error) => manual_outcome(format!(
+                                "direct_failed:{direct_error};clipboard_failed:{clipboard_error}"
+                            )),
+                            }
+                        }
+                    }
+                }
+                PasteMethod::Direct => match paste_direct(
+                    &mut enigo,
+                    &text,
+                    #[cfg(target_os = "linux")]
+                    settings.typing_tool,
+                ) {
+                    Ok(()) => success_outcome(InsertionMethod::Direct, &text, &current_target),
+                    Err(error) => manual_outcome(format!("direct_failed:{error}")),
+                },
+                PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
+                    match paste_via_clipboard(
+                        &mut enigo,
+                        &text,
+                        &app_handle,
+                        &paste_method,
+                        paste_delay_ms,
+                        paste_delay_after_ms,
+                    ) {
+                        Ok(()) => {
+                            success_outcome(InsertionMethod::Clipboard, &text, &current_target)
+                        }
+                        Err(error) => manual_outcome(format!("clipboard_failed:{error}")),
+                    }
+                }
+                PasteMethod::ExternalScript => match settings
+                    .external_script_path
+                    .as_ref()
+                    .filter(|path| !path.is_empty())
+                {
+                    Some(path) => match paste_via_external_script(&text, path) {
+                        Ok(()) => success_outcome(InsertionMethod::Direct, &text, &current_target),
+                        Err(error) => manual_outcome(format!("external_script_failed:{error}")),
+                    },
+                    None => manual_outcome("external_script_not_configured"),
+                },
+                PasteMethod::None => unreachable!(),
+            },
+            Err(_) => manual_outcome("input_service_busy"),
+        }
+    } else {
+        manual_outcome("input_service_unavailable")
+    };
 
-    // Perform the paste operation
-    match paste_method {
-        PasteMethod::None => {
-            info!("PasteMethod::None selected - skipping paste action");
+    if outcome.inserted && should_send_auto_submit(settings.auto_submit, paste_method) {
+        let submit_result = app_handle
+            .try_state::<EnigoState>()
+            .ok_or_else(|| "Enigo state not initialized for auto-submit".to_string())
+            .and_then(|enigo_state| {
+                let mut enigo = enigo_state
+                    .0
+                    .lock()
+                    .map_err(|e| format!("Failed to lock Enigo for auto-submit: {e}"))?;
+                std::thread::sleep(Duration::from_millis(50));
+                send_return_key(&mut enigo, settings.auto_submit_key)
+            });
+        if let Err(error) = submit_result {
+            warn!("Text was inserted, but auto-submit failed: {error}");
         }
-        PasteMethod::Direct => {
-            paste_direct(
-                &mut enigo,
-                &text,
-                #[cfg(target_os = "linux")]
-                settings.typing_tool,
-            )?;
-        }
-        PasteMethod::CtrlV | PasteMethod::CtrlShiftV | PasteMethod::ShiftInsert => {
-            paste_via_clipboard(
-                &mut enigo,
-                &text,
-                &app_handle,
-                &paste_method,
-                paste_delay_ms,
-                paste_delay_after_ms,
-            )?
-        }
-        PasteMethod::ExternalScript => {
-            let script_path = settings
-                .external_script_path
-                .as_ref()
-                .filter(|p| !p.is_empty())
-                .ok_or("External script path is not configured")?;
-            paste_via_external_script(&text, script_path)?;
-        }
-    }
-
-    if should_send_auto_submit(settings.auto_submit, paste_method) {
-        std::thread::sleep(Duration::from_millis(50));
-        send_return_key(&mut enigo, settings.auto_submit_key)?;
     }
 
     // After pasting, optionally copy to clipboard based on settings
-    if settings.clipboard_handling == ClipboardHandling::CopyToClipboard {
+    if outcome.inserted && settings.clipboard_handling == ClipboardHandling::CopyToClipboard {
         let clipboard = app_handle.clipboard();
-        clipboard
-            .write_text(&text)
-            .map_err(|e| format!("Failed to copy to clipboard: {}", e))?;
+        if let Err(error) = clipboard.write_text(&text) {
+            warn!("Text was inserted, but the optional clipboard copy failed: {error}");
+        }
     }
 
-    Ok(())
+    if let Some(reason) = outcome.manual_reason.clone() {
+        let _ = app_handle.emit(
+            "insertion-manual-required",
+            ManualInsertionEvent {
+                reason,
+                text,
+                application_id: current_target.application_id.clone(),
+                window_title: current_target.window_title.clone(),
+            },
+        );
+    } else if let Some(undo) = outcome.undo.as_ref() {
+        if let Some(state) = app_handle.try_state::<InsertionState>() {
+            if let Ok(mut last) = state.0.lock() {
+                *last = Some(undo.clone());
+            }
+        }
+        let method = match outcome.method {
+            InsertionMethod::Direct => "direct",
+            InsertionMethod::Clipboard => "clipboard",
+            InsertionMethod::ManualCopy => "manual_copy",
+        };
+        let _ = app_handle.emit(
+            "insertion-completed",
+            InsertionCompletedEvent {
+                method: method.into(),
+                application_id: current_target.application_id.clone(),
+                window_title: current_target.window_title.clone(),
+                undo: undo.into(),
+            },
+        );
+    }
+
+    Ok(outcome)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn target(id: &str, secure: bool, known: bool) -> PlatformContext {
+        PlatformContext {
+            target_id: Some(id.into()),
+            secure_field: secure,
+            secure_field_known: known,
+            ..PlatformContext::default()
+        }
+    }
 
     #[test]
     fn auto_submit_requires_setting_enabled() {
@@ -682,9 +1089,102 @@ mod tests {
 
     #[test]
     fn auto_submit_runs_for_active_paste_methods() {
+        assert!(should_send_auto_submit(true, PasteMethod::Reliable));
         assert!(should_send_auto_submit(true, PasteMethod::CtrlV));
         assert!(should_send_auto_submit(true, PasteMethod::Direct));
         assert!(should_send_auto_submit(true, PasteMethod::CtrlShiftV));
         assert!(should_send_auto_submit(true, PasteMethod::ShiftInsert));
+    }
+
+    #[test]
+    fn secure_unknown_or_changed_targets_fail_closed() {
+        assert_eq!(
+            insertion_block_reason(&target("a", false, false), &target("a", false, true)),
+            Some("target_security_unknown")
+        );
+        assert_eq!(
+            insertion_block_reason(&target("a", true, true), &target("a", true, true)),
+            Some("secure_field")
+        );
+        assert_eq!(
+            insertion_block_reason(&target("a", false, true), &target("b", false, true)),
+            Some("target_changed")
+        );
+        assert_eq!(
+            insertion_block_reason(&target("a", false, true), &target("a", false, true)),
+            None
+        );
+    }
+
+    #[test]
+    fn boundary_formatting_handles_spacing_case_and_sentence_starts() {
+        assert_eq!(
+            prepare_text_for_boundary(" Hello ", Some("existing "), false),
+            "hello"
+        );
+        assert_eq!(
+            prepare_text_for_boundary("Hello", Some("existing"), false),
+            " hello"
+        );
+        assert_eq!(
+            prepare_text_for_boundary("Hello", Some("Finished. "), false),
+            "Hello"
+        );
+        assert_eq!(
+            prepare_text_for_boundary("NASA works", Some("existing "), true),
+            "NASA works "
+        );
+    }
+
+    #[test]
+    fn clipboard_result_never_hides_restore_failure() {
+        assert_eq!(
+            combine_clipboard_results(Ok(()), Err("restore".into())),
+            Err("restore".into())
+        );
+        assert_eq!(
+            combine_clipboard_results(Err("paste".into()), Err("restore".into())),
+            Err("paste; restore".into())
+        );
+    }
+
+    #[test]
+    fn undo_metadata_contains_only_hash_length_target_and_time() {
+        let outcome = success_outcome(
+            InsertionMethod::Direct,
+            "secret transcript",
+            &target("target", false, true),
+        );
+        let undo = outcome.undo.expect("undo metadata");
+        assert_eq!(undo.target_id, "target");
+        assert_eq!(undo.inserted_chars, 17);
+        assert_eq!(undo.inserted_text_sha256.len(), 64);
+        assert!(undo.inserted_at_unix_ms > 0);
+    }
+
+    #[test]
+    fn macos_clipboard_format_check_accepts_only_plain_text_representations() {
+        assert_eq!(
+            macos_clipboard_description_state(
+                "{Unicode text, 18, «class utf8», 9, «class ut16», 18, string, 9}"
+            ),
+            ClipboardFormatState::PlainText
+        );
+        assert_eq!(
+            macos_clipboard_description_state("{}"),
+            ClipboardFormatState::Empty
+        );
+        assert_eq!(
+            macos_clipboard_description_state("{Unicode text, 18, HTML, 42}"),
+            ClipboardFormatState::Unsafe
+        );
+        assert_eq!(
+            macos_clipboard_description_state("{Unicode text, 18, TIFF picture, 2048}"),
+            ClipboardFormatState::Unsafe
+        );
+        assert_eq!(
+            macos_clipboard_description_state("{Unicode text, 18, custom vendor data, 40}"),
+            ClipboardFormatState::Unsafe
+        );
     }
 }

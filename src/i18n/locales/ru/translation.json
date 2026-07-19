@@ -1,5 +1,6 @@
 {
   "tray": {
+    "pasteLastTranscript": "Вставить последнюю транскрипцию",
     "settings": "Настройки...",
     "checkUpdates": "Проверить обновления...",
     "copyLastTranscript": "Скопировать последнюю транскрипцию",

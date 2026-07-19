@@ -200,6 +200,14 @@ pub fn update_tray_menu(app: &AppHandle, locale: Option<&str>) {
         None::<&str>,
     )
     .expect("failed to create copy last transcript item");
+    let paste_last_transcript_i = MenuItem::with_id(
+        app,
+        "paste_last_transcript",
+        &strings.paste_last_transcript,
+        true,
+        None::<&str>,
+    )
+    .expect("failed to create paste last transcript item");
     let model_loaded = app.state::<Arc<TranscriptionManager>>().is_model_loaded();
     let quit_i = MenuItem::with_id(app, "quit", &strings.quit, true, quit_accelerator)
         .expect("failed to create quit item");
@@ -255,6 +263,7 @@ pub fn update_tray_menu(app: &AppHandle, locale: Option<&str>) {
                     &separator(),
                     &cancel_i,
                     &separator(),
+                    &paste_last_transcript_i,
                     &copy_last_transcript_i,
                     &separator(),
                     &settings_i,
@@ -269,6 +278,7 @@ pub fn update_tray_menu(app: &AppHandle, locale: Option<&str>) {
             &[
                 &version_i,
                 &separator(),
+                &paste_last_transcript_i,
                 &copy_last_transcript_i,
                 &separator(),
                 &model_submenu,
@@ -333,6 +343,37 @@ pub fn copy_last_transcript(app: &AppHandle) {
     }
 
     info!("Copied last transcript to clipboard via tray.");
+}
+
+pub fn paste_last_transcript(app: &AppHandle) {
+    let history_manager = app.state::<Arc<HistoryManager>>();
+    let entry = match history_manager.get_latest_completed_entry() {
+        Ok(Some(entry)) => entry,
+        Ok(None) => {
+            warn!("No completed transcription history entries available for paste-last.");
+            return;
+        }
+        Err(err) => {
+            error!("Failed to fetch paste-last transcription entry: {err}");
+            return;
+        }
+    };
+
+    let text = last_transcript_text(&entry);
+    if text.trim().is_empty() {
+        warn!("Last completed transcription is empty; skipping paste-last.");
+        return;
+    }
+
+    let target = crate::platform_context::capture_active_target();
+    match crate::clipboard::paste(text.to_string(), app.clone(), Some(target)) {
+        Ok(outcome) if outcome.inserted => info!("Pasted last transcript via tray."),
+        Ok(outcome) => warn!(
+            "Paste-last deferred to manual recovery: {}",
+            outcome.manual_reason.as_deref().unwrap_or("unknown")
+        ),
+        Err(err) => error!("Paste-last failed: {err}"),
+    }
 }
 
 #[cfg(test)]

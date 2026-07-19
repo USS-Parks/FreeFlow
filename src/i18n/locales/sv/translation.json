@@ -1,5 +1,6 @@
 {
   "tray": {
+    "pasteLastTranscript": "Klistra in senaste transkriptionen",
     "settings": "Inställningar...",
     "checkUpdates": "Sök efter uppdateringar...",
     "copyLastTranscript": "Kopiera senaste transkriptionen",

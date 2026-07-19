@@ -15,6 +15,7 @@ mod llm_client;
 mod managers;
 mod model_install;
 mod overlay;
+mod platform_context;
 pub mod portable;
 mod settings;
 mod shortcut;
@@ -184,6 +185,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
+    app_handle.manage(clipboard::InsertionState::new());
     app_handle.manage(tray::CurrentTrayIconState::new());
 
     // Note: Shortcuts are NOT initialized here.
@@ -231,6 +233,9 @@ fn initialize_core_logic(app_handle: &AppHandle) {
             }
             "copy_last_transcript" => {
                 tray::copy_last_transcript(app);
+            }
+            "paste_last_transcript" => {
+                tray::paste_last_transcript(app);
             }
             "unload_model" => {
                 let transcription_manager = app.state::<Arc<TranscriptionManager>>();

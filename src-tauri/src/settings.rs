@@ -149,6 +149,7 @@ pub enum ModelUnloadTimeout {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum PasteMethod {
+    Reliable,
     CtrlV,
     Direct,
     None,
@@ -202,11 +203,11 @@ impl Default for KeyboardImplementation {
 
 impl Default for PasteMethod {
     fn default() -> Self {
-        // Default to CtrlV for macOS and Windows, Direct for Linux
+        // Windows and macOS use the FF-V4 target-guarded direct-first pipeline.
         #[cfg(target_os = "linux")]
         return PasteMethod::Direct;
         #[cfg(not(target_os = "linux"))]
-        return PasteMethod::CtrlV;
+        return PasteMethod::Reliable;
     }
 }
 
@@ -1241,7 +1242,7 @@ mod tests {
             "word_correction_threshold": 0.18,
             "history_limit": 5,
             "recording_retention_period": "preserve_limit",
-            "paste_method": "ctrl_v",
+            "paste_method": "reliable",
             "clipboard_handling": "dont_modify",
             "auto_submit": false,
             "auto_submit_key": "enter",

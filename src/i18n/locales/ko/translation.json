@@ -1,5 +1,6 @@
 {
   "tray": {
+    "pasteLastTranscript": "마지막 녹음 내용 붙여넣기",
     "settings": "설정...",
     "checkUpdates": "업데이트 확인...",
     "copyLastTranscript": "마지막 녹음 내용 복사",

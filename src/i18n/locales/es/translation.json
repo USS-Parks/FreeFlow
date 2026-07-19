@@ -1,5 +1,6 @@
 {
   "tray": {
+    "pasteLastTranscript": "Pegar la última transcripción",
     "settings": "Configuración...",
     "checkUpdates": "Buscar actualizaciones...",
     "copyLastTranscript": "Copiar la última transcripción",

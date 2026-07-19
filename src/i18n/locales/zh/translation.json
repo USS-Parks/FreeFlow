@@ -1,5 +1,6 @@
 {
   "tray": {
+    "pasteLastTranscript": "粘贴最新转录",
     "settings": "设置...",
     "checkUpdates": "检查更新...",
     "copyLastTranscript": "复制最新转录",
