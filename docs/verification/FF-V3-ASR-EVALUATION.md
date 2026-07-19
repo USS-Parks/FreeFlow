@@ -1,6 +1,6 @@
 # FF-V3 local ASR evaluation gate
 
-Status: **Windows public-corpus thresholds passed; hosted cross-platform and zero-network evidence in progress**
+Status: **Passed on Windows x86_64, Apple Silicon macOS, and Intel macOS**
 
 This document freezes the FF-V3 quality and resource thresholds before the
 first retained corpus benchmark. It supplements the release-level constraints
@@ -79,9 +79,13 @@ claim is not sufficient for the zero-network gate.
 
 ## Completion rule
 
-FF-V3 remains open until public-corpus results, platform manifests, model
-identity/hash, memory measurements, and real zero-network evidence pass on
-Windows and macOS. Project-owned corpus evidence remains a mandatory later
-release gate under the explicit 2026-07-18 rescope. The user's separate deferral
-of FF-V2 does not convert FF-V2 into a pass or waive any revised FF-V3 platform
-evidence.
+Public-corpus results, platform manifests, model identity/hash, memory
+measurements, and real zero-network evidence passed on Windows x86_64, Apple
+Silicon macOS, and Intel macOS in hosted run `29672022926`. The permanent
+summary is recorded in
+[`FF-V3-HOSTED-CROSS-PLATFORM-2026-07-18.md`](FF-V3-HOSTED-CROSS-PLATFORM-2026-07-18.md).
+FF-V3 is complete under the revised gate.
+
+Project-owned corpus evidence remains a mandatory later release gate under the
+explicit 2026-07-18 rescope. The user's separate deferral of FF-V2 does not
+convert FF-V2 into a pass.

@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "prompt": "FF-V3",
+  "status": "passed",
+  "workflow_run_id": 29672022926,
+  "workflow_run_url": "https://github.com/USS-Parks/FreeFlow/actions/runs/29672022926",
+  "head_sha": "10b6744cef2ac41bfc4f7f8e6106b7f2f354abf5",
+  "normal_ci_run_id": 29672015509,
+  "normal_ci_conclusion": "success",
+  "manifest_digest": "0c6a40bac30ebe258d963f76e98a49b078d1a1dd426b4d4d530c6e6bf88a7186",
+  "model_id": "parakeet-unified-en-0.6b-q8_0",
+  "model_sha256": "4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795",
+  "corpus": {
+    "name": "LibriSpeech test-clean deterministic 20-speaker subset",
+    "archive_sha256": "39fde525e59672dc6d1551919b1478f724438a95aa55f874b576be21967e6c23",
+    "item_count": 20,
+    "license": "CC-BY-4.0"
+  },
+  "thresholds": {
+    "max_wer": 0.12,
+    "min_task_success": 0.95,
+    "max_p50_ms": 2500,
+    "max_p95_ms": 6000,
+    "max_idle_rss_bytes": 314572800,
+    "max_loaded_rss_bytes": 3221225472,
+    "network_denied_required": true
+  },
+  "platforms": [
+    {
+      "platform": "windows-x86_64",
+      "runner": "windows-2022",
+      "raw_wer": 0.013011152416356878,
+      "task_success": 0.95,
+      "latency_p50_ms": 1665,
+      "latency_p95_ms": 4170,
+      "resident_memory_before_load_bytes": 15843328,
+      "resident_memory_after_load_bytes": 1086214144,
+      "resident_memory_after_evaluation_bytes": 1284997120,
+      "network_probe_target": "1.1.1.1:443",
+      "network_denied": true,
+      "network_error": "os error 10013",
+      "executable_sha256": "9131be8b70ddbbc6b36531d705c541b5c166c9051e99d3a3cb5eafdc6b52090d",
+      "artifact_name": "ff-v3-windows-x86_64-1",
+      "artifact_digest": "sha256:63a13ea64f2753ff6d6a6448c54a7d9b76a6f10d4cb04a3cf165c4b59987788b",
+      "passed": true
+    },
+    {
+      "platform": "macos-arm64",
+      "runner": "macos-15",
+      "raw_wer": 0.013011152416356878,
+      "task_success": 0.95,
+      "latency_p50_ms": 690,
+      "latency_p95_ms": 1666,
+      "resident_memory_before_load_bytes": 74448896,
+      "resident_memory_after_load_bytes": 1193328640,
+      "resident_memory_after_evaluation_bytes": 1403895808,
+      "network_probe_target": "1.1.1.1:443",
+      "network_denied": true,
+      "network_error": "Operation not permitted (os error 1)",
+      "executable_sha256": "5111d8b9d078604967d3ca3bfad84364c09c750ec01872cd0ddda32afee144c9",
+      "artifact_name": "ff-v3-macos-arm64-1",
+      "artifact_digest": "sha256:f5835a9f0d5c0b5235cd69b049f1b4f2e6d5edf98d97472a235cbcd2fa9a18ff",
+      "passed": true
+    },
+    {
+      "platform": "macos-x86_64",
+      "runner": "macos-15-intel",
+      "raw_wer": 0.013011152416356878,
+      "task_success": 0.95,
+      "latency_p50_ms": 1588,
+      "latency_p95_ms": 3779,
+      "resident_memory_before_load_bytes": 57778176,
+      "resident_memory_after_load_bytes": 1171804160,
+      "resident_memory_after_evaluation_bytes": 1351737344,
+      "network_probe_target": "1.1.1.1:443",
+      "network_denied": true,
+      "network_error": "Operation not permitted (os error 1)",
+      "executable_sha256": "4662535637cc3c009f00f0b25b7479fb8b6f85a4fce0a53c1e9d42f7ec6fbc58",
+      "artifact_name": "ff-v3-macos-x86_64-1",
+      "artifact_digest": "sha256:7353d8021ac12ac657523a77fcf113736fe15c0287bf23d3202c99d222b47c88",
+      "passed": true
+    }
+  ],
+  "project_owned_corpus": {
+    "status": "deferred",
+    "gate": "later release gate",
+    "waived": false
+  },
+  "passed": true
+}

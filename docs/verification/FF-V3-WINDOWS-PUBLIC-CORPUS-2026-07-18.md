@@ -1,6 +1,6 @@
 # FF-V3 Windows public-corpus evidence — 2026-07-18
 
-Status: **Windows public-corpus threshold pass; FF-V3 remains open**
+Status: **Windows public-corpus threshold pass; FF-V3 later closed by hosted cross-platform evidence**
 
 ## Revision and host
 
@@ -76,17 +76,16 @@ the required zero-network pass. A temporary program-scoped Windows Firewall
 rule was attempted before evaluation and Windows rejected it with `Access is
 denied` because this session lacks administrator rights.
 
-FF-V3 therefore remains open for:
-
-1. Windows process-level blocked-network or packet-trace evidence with suitable
-   privileges;
-2. the same public corpus, quality, latency, memory, and blocked-network
-   evidence on the macOS reference host; and
-3. any additional model-matrix candidate after it receives an FF-V1-compliant
-   immutable manifest and explicit installation consent.
+Those open platform items were later resolved by hosted run `29672022926`.
+Windows passed under a program-scoped outbound firewall rule, while Apple
+Silicon and Intel macOS passed under a network-denying sandbox. See
+[`FF-V3-HOSTED-CROSS-PLATFORM-2026-07-18.md`](FF-V3-HOSTED-CROSS-PLATFORM-2026-07-18.md)
+for the retained cross-platform result and honest prior-run history.
 
 By explicit user rescope later on 2026-07-18, the consented project-owned
 dictation corpus remains mandatory at the later release gate rather than FF-V3.
 It is deferred, not waived or replaced with synthetic evidence.
 
-No FF-V4 work is authorized or started by this evidence.
+This local Windows evidence did not itself authorize FF-V4. The later hosted
+cross-platform pass completed the revised FF-V3 gate and made FF-V4 next in the
+approved roster.
