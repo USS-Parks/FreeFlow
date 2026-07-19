@@ -7,7 +7,16 @@
     "unloadModel": "Model ontladen",
     "model": "Model",
     "quit": "Afsluiten",
-    "cancel": "Annuleren"
+    "cancel": "Annuleren",
+    "openHub": "Open FreeFlow",
+    "startDictation": "Start Dictation",
+    "stopDictation": "Stop Dictation",
+    "microphone": "Microphone...",
+    "language": "Language...",
+    "history": "History",
+    "statusIdle": "Idle",
+    "statusRecording": "Recording",
+    "statusProcessing": "Processing"
   },
   "sidebar": {
     "general": "Algemeen",
@@ -305,7 +314,9 @@
           "description": "Waar de overlay op het scherm verschijnt tijdens het opnemen en transcriberen.",
           "options": {
             "bottom": "Onderkant",
-            "top": "Bovenkant"
+            "top": "Bovenkant",
+            "left": "Left",
+            "right": "Right"
           }
         }
       },
@@ -647,6 +658,10 @@
   },
   "overlay": {
     "transcribing": "Transcriberen...",
-    "processing": "Verwerken..."
+    "processing": "Verwerken...",
+    "recording": "Recording",
+    "success": "Done",
+    "warning": "Needs attention",
+    "error": "Error"
   }
 }

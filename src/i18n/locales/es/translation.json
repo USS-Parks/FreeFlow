@@ -7,7 +7,16 @@
     "unloadModel": "Descargar modelo",
     "model": "Modelo",
     "quit": "Salir",
-    "cancel": "Cancelar"
+    "cancel": "Cancelar",
+    "openHub": "Open FreeFlow",
+    "startDictation": "Start Dictation",
+    "stopDictation": "Stop Dictation",
+    "microphone": "Microphone...",
+    "language": "Language...",
+    "history": "History",
+    "statusIdle": "Idle",
+    "statusRecording": "Recording",
+    "statusProcessing": "Processing"
   },
   "sidebar": {
     "general": "General",
@@ -305,7 +314,9 @@
           "description": "Dónde aparece la superposición en la pantalla durante la grabación y la transcripción.",
           "options": {
             "bottom": "Abajo",
-            "top": "Arriba"
+            "top": "Arriba",
+            "left": "Left",
+            "right": "Right"
           }
         }
       },
@@ -644,7 +655,11 @@
   },
   "overlay": {
     "transcribing": "Transcribiendo...",
-    "processing": "Procesando..."
+    "processing": "Procesando...",
+    "recording": "Recording",
+    "success": "Done",
+    "warning": "Needs attention",
+    "error": "Error"
   },
   "whatsNew": {
     "title": "Nuevo en FreeFlow v{{version}}"

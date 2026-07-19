@@ -7,7 +7,16 @@
     "unloadModel": "मॉडल अनलोड करें",
     "model": "मॉडल",
     "quit": "बाहर निकलें",
-    "cancel": "रद्द करें"
+    "cancel": "रद्द करें",
+    "openHub": "Open FreeFlow",
+    "startDictation": "Start Dictation",
+    "stopDictation": "Stop Dictation",
+    "microphone": "Microphone...",
+    "language": "Language...",
+    "history": "History",
+    "statusIdle": "Idle",
+    "statusRecording": "Recording",
+    "statusProcessing": "Processing"
   },
   "sidebar": {
     "general": "सामान्य",
@@ -305,7 +314,9 @@
           "description": "रिकॉर्डिंग और ट्रांसक्रिप्शन के दौरान ओवरले स्क्रीन पर कहां दिखे.",
           "options": {
             "bottom": "नीचे",
-            "top": "ऊपर"
+            "top": "ऊपर",
+            "left": "Left",
+            "right": "Right"
           }
         }
       },
@@ -647,6 +658,10 @@
   },
   "overlay": {
     "transcribing": "ट्रांसक्राइब हो रहा है...",
-    "processing": "प्रोसेस हो रहा है..."
+    "processing": "प्रोसेस हो रहा है...",
+    "recording": "Recording",
+    "success": "Done",
+    "warning": "Needs attention",
+    "error": "Error"
   }
 }

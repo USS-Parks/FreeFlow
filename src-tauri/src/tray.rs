@@ -192,6 +192,42 @@ pub fn update_tray_menu(app: &AppHandle, locale: Option<&str>) {
         settings_accelerator,
     )
     .expect("failed to create settings item");
+    let open_hub_i = MenuItem::with_id(app, "open_hub", &strings.open_hub, true, None::<&str>)
+        .expect("failed to create open hub item");
+    let start_dictation_i = MenuItem::with_id(
+        app,
+        "toggle_dictation",
+        &strings.start_dictation,
+        true,
+        None::<&str>,
+    )
+    .expect("failed to create start dictation item");
+    let stop_dictation_i = MenuItem::with_id(
+        app,
+        "toggle_dictation",
+        &strings.stop_dictation,
+        true,
+        None::<&str>,
+    )
+    .expect("failed to create stop dictation item");
+    let microphone_i = MenuItem::with_id(
+        app,
+        "microphone_settings",
+        &strings.microphone,
+        true,
+        None::<&str>,
+    )
+    .expect("failed to create microphone item");
+    let language_i = MenuItem::with_id(
+        app,
+        "language_settings",
+        &strings.language,
+        true,
+        None::<&str>,
+    )
+    .expect("failed to create language item");
+    let history_i = MenuItem::with_id(app, "history", &strings.history, true, None::<&str>)
+        .expect("failed to create history item");
     let copy_last_transcript_i = MenuItem::with_id(
         app,
         "copy_last_transcript",
@@ -253,7 +289,27 @@ pub fn update_tray_menu(app: &AppHandle, locale: Option<&str>) {
     .expect("failed to create unload model item");
 
     let menu = match state {
-        TrayIconState::Recording | TrayIconState::Transcribing => {
+        TrayIconState::Recording => {
+            let cancel_i = MenuItem::with_id(app, "cancel", &strings.cancel, true, None::<&str>)
+                .expect("failed to create cancel item");
+            Menu::with_items(
+                app,
+                &[
+                    &version_i,
+                    &separator(),
+                    &stop_dictation_i,
+                    &cancel_i,
+                    &separator(),
+                    &history_i,
+                    &separator(),
+                    &settings_i,
+                    &separator(),
+                    &quit_i,
+                ],
+            )
+            .expect("failed to create menu")
+        }
+        TrayIconState::Transcribing => {
             let cancel_i = MenuItem::with_id(app, "cancel", &strings.cancel, true, None::<&str>)
                 .expect("failed to create cancel item");
             Menu::with_items(
@@ -263,8 +319,7 @@ pub fn update_tray_menu(app: &AppHandle, locale: Option<&str>) {
                     &separator(),
                     &cancel_i,
                     &separator(),
-                    &paste_last_transcript_i,
-                    &copy_last_transcript_i,
+                    &history_i,
                     &separator(),
                     &settings_i,
                     &separator(),
@@ -278,8 +333,15 @@ pub fn update_tray_menu(app: &AppHandle, locale: Option<&str>) {
             &[
                 &version_i,
                 &separator(),
+                &open_hub_i,
+                &start_dictation_i,
+                &separator(),
                 &paste_last_transcript_i,
                 &copy_last_transcript_i,
+                &separator(),
+                &microphone_i,
+                &language_i,
+                &history_i,
                 &separator(),
                 &model_submenu,
                 &unload_model_i,
@@ -295,7 +357,12 @@ pub fn update_tray_menu(app: &AppHandle, locale: Option<&str>) {
     let tray = app.state::<TrayIcon>();
     let _ = tray.set_menu(Some(menu));
     let _ = tray.set_icon_as_template(true);
-    let _ = tray.set_tooltip(Some(version_label));
+    let state_label = match state {
+        TrayIconState::Idle => &strings.status_idle,
+        TrayIconState::Recording => &strings.status_recording,
+        TrayIconState::Transcribing => &strings.status_processing,
+    };
+    let _ = tray.set_tooltip(Some(format!("{version_label} — {state_label}")));
 }
 
 fn last_transcript_text(entry: &HistoryEntry) -> &str {

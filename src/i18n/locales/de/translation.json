@@ -7,7 +7,16 @@
     "unloadModel": "Modell entladen",
     "model": "Modell",
     "quit": "Beenden",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "openHub": "Open FreeFlow",
+    "startDictation": "Start Dictation",
+    "stopDictation": "Stop Dictation",
+    "microphone": "Microphone...",
+    "language": "Language...",
+    "history": "History",
+    "statusIdle": "Idle",
+    "statusRecording": "Recording",
+    "statusProcessing": "Processing"
   },
   "sidebar": {
     "general": "Allgemein",
@@ -305,7 +314,9 @@
           "description": "Visuelles Feedback-Overlay während Aufnahme und Transkription anzeigen. Unter Linux wird 'Keine' empfohlen.",
           "options": {
             "bottom": "Unten",
-            "top": "Oben"
+            "top": "Oben",
+            "left": "Left",
+            "right": "Right"
           }
         }
       },
@@ -644,7 +655,11 @@
   },
   "overlay": {
     "transcribing": "Transkribiere...",
-    "processing": "Verarbeite..."
+    "processing": "Verarbeite...",
+    "recording": "Recording",
+    "success": "Done",
+    "warning": "Needs attention",
+    "error": "Error"
   },
   "whatsNew": {
     "title": "Neu in FreeFlow v{{version}}"

@@ -7,7 +7,16 @@
     "unloadModel": "모델 언로드",
     "model": "모델",
     "quit": "종료",
-    "cancel": "취소"
+    "cancel": "취소",
+    "openHub": "Open FreeFlow",
+    "startDictation": "Start Dictation",
+    "stopDictation": "Stop Dictation",
+    "microphone": "Microphone...",
+    "language": "Language...",
+    "history": "History",
+    "statusIdle": "Idle",
+    "statusRecording": "Recording",
+    "statusProcessing": "Processing"
   },
   "sidebar": {
     "general": "일반",
@@ -305,7 +314,9 @@
           "description": "녹음 및 전사 중 시각적 피드백 오버레이를 표시합니다. Linux에서는 '없음'을 권장합니다.",
           "options": {
             "bottom": "하단",
-            "top": "상단"
+            "top": "상단",
+            "left": "Left",
+            "right": "Right"
           }
         }
       },
@@ -644,7 +655,11 @@
   },
   "overlay": {
     "transcribing": "텍스트로 변환 중...",
-    "processing": "처리 중..."
+    "processing": "처리 중...",
+    "recording": "Recording",
+    "success": "Done",
+    "warning": "Needs attention",
+    "error": "Error"
   },
   "whatsNew": {
     "title": "FreeFlow v{{version}}의 새 소식"

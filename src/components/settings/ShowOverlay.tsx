@@ -39,14 +39,27 @@ export const ShowOverlay: React.FC<ShowOverlayProps> = React.memo(
         value: "top",
         label: t("settings.advanced.overlay.position.options.top"),
       },
+      {
+        value: "left",
+        label: t("settings.advanced.overlay.position.options.left"),
+      },
+      {
+        value: "right",
+        label: t("settings.advanced.overlay.position.options.right"),
+      },
     ];
 
     const selectedStyle = (getSetting("overlay_style") ||
       "live") as OverlayStyle;
-    // Only "top" and "bottom" are selectable; anything else (empty, or a legacy
-    // "none" from before the position was retired) falls back to "bottom".
-    const selectedPosition: OverlayPosition =
-      getSetting("overlay_position") === "top" ? "top" : "bottom";
+    const storedPosition = getSetting("overlay_position");
+    const selectedPosition: OverlayPosition = [
+      "top",
+      "left",
+      "right",
+      "bottom",
+    ].includes(storedPosition ?? "")
+      ? (storedPosition as OverlayPosition)
+      : "bottom";
 
     return (
       <>

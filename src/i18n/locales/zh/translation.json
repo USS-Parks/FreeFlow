@@ -7,7 +7,16 @@
     "unloadModel": "卸载模型",
     "model": "模型",
     "quit": "退出",
-    "cancel": "取消"
+    "cancel": "取消",
+    "openHub": "Open FreeFlow",
+    "startDictation": "Start Dictation",
+    "stopDictation": "Stop Dictation",
+    "microphone": "Microphone...",
+    "language": "Language...",
+    "history": "History",
+    "statusIdle": "Idle",
+    "statusRecording": "Recording",
+    "statusProcessing": "Processing"
   },
   "sidebar": {
     "general": "通用",
@@ -305,7 +314,9 @@
           "description": "在录制和转录期间显示可视反馈悬浮窗。在 Linux 上建议选择「无」。",
           "options": {
             "bottom": "底部",
-            "top": "顶部"
+            "top": "顶部",
+            "left": "Left",
+            "right": "Right"
           }
         }
       },
@@ -644,7 +655,11 @@
   },
   "overlay": {
     "transcribing": "正在转录...",
-    "processing": "处理中..."
+    "processing": "处理中...",
+    "recording": "Recording",
+    "success": "Done",
+    "warning": "Needs attention",
+    "error": "Error"
   },
   "whatsNew": {
     "title": "FreeFlow v{{version}} 新功能"

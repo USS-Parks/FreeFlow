@@ -171,6 +171,36 @@ src-tauri/Cargo.toml`; ESLint over `src`; service-boundary checker; Prettier;
   matrix is an explicit FF-R2 release blocker. FF-V5 is next.
 - Commit SHA: recorded by the closeout commit containing this entry.
 
+### 2026-07-19 — FF-V5 (in progress)
+
+- Objective: Complete the original FreeFlow status bar and native tray/menu
+  recovery surface with persistent work-area docking, accessible state
+  semantics, and single-pipeline controls.
+- Starting commit: `b4bd830` on canonical `main`.
+- Reuse classification: extension at the existing Tauri overlay, tray,
+  transcription coordinator, typed settings, i18next, and Hub navigation seams;
+  no new runtime dependency.
+- Files changed: overlay state/docking service and UI; tray state/menu controls;
+  settings/bindings; Hub keyboard navigation; 23 locale catalogs; capability,
+  PSPR, and frozen FF-V5 evidence.
+- Verification commands: verified Bun 1.3.14 frozen install; `bun run lint`;
+  `bun run format:check`; `bun run check:translations`; `bun run build`;
+  `cargo test --manifest-path src-tauri/Cargo.toml --lib`; warnings-denied
+  `cargo clippy --all-targets` with only the seven inherited lint classes
+  allowed; `bun run tauri build --no-bundle`; `cargo audit -f
+src-tauri/Cargo.lock`; provenance and diff gates.
+- Automated evidence: 162/162 runnable Rust library tests passed with two
+  live-model tests ignored; all 22 non-English catalogs contain the 413-key
+  reference surface; frontend/service-boundary/type/build gates and strict
+  Clippy delta passed. RustSec reported no denied vulnerability and 28 allowed
+  upstream warnings. The final Windows release executable is 44,092,416 bytes
+  with SHA-256
+  `5241d495a565b346db33d756b8a8f085588a90f5d8f175f8a9b8f16fa27ea85c`.
+- Result: implementation candidate passes locally. Native hosted Windows/macOS
+  verification remains before prompt closeout; retained interactive evidence is
+  assigned to FF-R2 by the 2026-07-19 PSPR consolidation.
+- Commit SHA: recorded by the candidate commit containing this entry.
+
 ## Entry template
 
 ### YYYY-MM-DD — FF-XX

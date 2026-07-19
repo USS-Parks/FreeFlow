@@ -112,6 +112,8 @@ pub struct PostProcessProvider {
 #[serde(rename_all = "lowercase")]
 pub enum OverlayPosition {
     Top,
+    Left,
+    Right,
     // `none` is retired: overlay visibility is owned by `OverlayStyle` now. The
     // alias keeps legacy stores (`"overlay_position": "none"`) deserializing
     // instead of failing the whole load; the one-time overlay migration reads the

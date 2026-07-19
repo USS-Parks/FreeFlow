@@ -12,7 +12,8 @@ use crate::settings::{get_settings, AppSettings, OverlayStyle, APPLE_INTELLIGENC
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
 use crate::utils::{
-    self, show_processing_overlay, show_recording_overlay, show_transcribing_overlay,
+    self, show_error_overlay, show_processing_overlay, show_recording_overlay,
+    show_success_overlay, show_transcribing_overlay, show_warning_overlay,
 };
 use crate::TranscriptionCoordinator;
 use ferrous_opencc::{config::BuiltinConfig, OpenCC};
@@ -650,7 +651,7 @@ impl ShortcutAction for TranscribeAction {
             // Starting failed (for example due to blocked microphone permissions).
             // Revert UI state so we don't stay stuck in the recording overlay.
             tm.cancel_stream();
-            utils::hide_recording_overlay(app);
+            show_error_overlay(app);
             change_tray_icon(app, TrayIconState::Idle);
             if let Some(err) = recording_error {
                 let error_type = if is_microphone_access_denied(&err) {
@@ -824,7 +825,7 @@ impl ShortcutAction for TranscribeAction {
                         error!(
                             "Aborting transcription because the source recording was not persisted"
                         );
-                        utils::hide_recording_overlay(&ah);
+                        show_error_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                         return;
                     }
@@ -931,7 +932,7 @@ impl ShortcutAction for TranscribeAction {
                             );
 
                             if processed.final_text.is_empty() {
-                                utils::hide_recording_overlay(&ah);
+                                show_warning_overlay(&ah);
                                 change_tray_icon(&ah, TrayIconState::Idle);
                             } else {
                                 let ah_clone = ah.clone();
@@ -951,28 +952,38 @@ impl ShortcutAction for TranscribeAction {
                                         ah_clone.clone(),
                                         captured_target,
                                     ) {
-                                        Ok(outcome) if outcome.inserted => debug!(
-                                            "Text pasted successfully in {:?}",
-                                            paste_time.elapsed()
-                                        ),
-                                        Ok(outcome) if outcome.manual_reason.is_none() => {
-                                            debug!("Automatic insertion is disabled by settings")
+                                        Ok(outcome) if outcome.inserted => {
+                                            debug!(
+                                                "Text pasted successfully in {:?}",
+                                                paste_time.elapsed()
+                                            );
+                                            show_success_overlay(&ah_clone);
                                         }
-                                        Ok(outcome) => warn!(
-                                            "Automatic insertion deferred to manual recovery: {}",
-                                            outcome.manual_reason.as_deref().unwrap_or("unknown")
-                                        ),
+                                        Ok(outcome) if outcome.manual_reason.is_none() => {
+                                            debug!("Automatic insertion is disabled by settings");
+                                            show_warning_overlay(&ah_clone);
+                                        }
+                                        Ok(outcome) => {
+                                            warn!(
+                                                "Automatic insertion deferred to manual recovery: {}",
+                                                outcome
+                                                    .manual_reason
+                                                    .as_deref()
+                                                    .unwrap_or("unknown")
+                                            );
+                                            show_warning_overlay(&ah_clone);
+                                        }
                                         Err(e) => {
                                             error!("Failed to paste transcription: {}", e);
                                             let _ = ah_clone.emit("paste-error", ());
+                                            show_error_overlay(&ah_clone);
                                         }
                                     }
-                                    utils::hide_recording_overlay(&ah_clone);
                                     change_tray_icon(&ah_clone, TrayIconState::Idle);
                                 })
                                 .unwrap_or_else(|e| {
                                     error!("Failed to run paste on main thread: {:?}", e);
-                                    utils::hide_recording_overlay(&ah);
+                                    show_error_overlay(&ah);
                                     change_tray_icon(&ah, TrayIconState::Idle);
                                 });
                             }
@@ -1015,7 +1026,7 @@ impl ShortcutAction for TranscribeAction {
                             // message is also in freeflow.log via the line above.
                             let _ = ah.emit("transcription-error", err.to_string());
                             // The empty pending history row remains retryable.
-                            utils::hide_recording_overlay(&ah);
+                            show_error_overlay(&ah);
                             change_tray_icon(&ah, TrayIconState::Idle);
                         }
                     }
@@ -1024,7 +1035,7 @@ impl ShortcutAction for TranscribeAction {
                 debug!("No samples retrieved from recording stop");
                 // Tear down any streaming worker so its channel doesn't leak.
                 tm.cancel_stream();
-                utils::hide_recording_overlay(&ah);
+                show_warning_overlay(&ah);
                 change_tray_icon(&ah, TrayIconState::Idle);
             }
         });

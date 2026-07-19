@@ -46,7 +46,7 @@ use tauri::image::Image;
 pub use transcription_coordinator::TranscriptionCoordinator;
 
 use tauri::tray::TrayIconBuilder;
-use tauri::{AppHandle, Listener, Manager};
+use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_log::{Builder as LogBuilder, RotationStrategy, Target, TargetKind};
 
@@ -228,8 +228,24 @@ fn initialize_core_logic(app_handle: &AppHandle) {
         .show_menu_on_left_click(true)
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "settings" => {
+            "settings" | "open_hub" => {
                 show_main_window(app);
+            }
+            "toggle_dictation" => {
+                app.state::<TranscriptionCoordinator>().send_input(
+                    "transcribe",
+                    "tray",
+                    true,
+                    false,
+                );
+            }
+            "history" => {
+                show_main_window(app);
+                let _ = app.emit("navigate-section", "history");
+            }
+            "microphone_settings" | "language_settings" => {
+                show_main_window(app);
+                let _ = app.emit("navigate-section", "general");
             }
             "copy_last_transcript" => {
                 tray::copy_last_transcript(app);
@@ -311,6 +327,14 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Create the recording overlay window (hidden by default)
     utils::create_recording_overlay(app_handle);
+
+    let overlay_dock_handle = app_handle.clone();
+    app_handle.listen("overlay-drag-started", |_| {
+        overlay::begin_overlay_drag();
+    });
+    app_handle.listen("overlay-drag-finished", move |_| {
+        overlay::finish_overlay_drag(&overlay_dock_handle);
+    });
 }
 
 #[tauri::command]
@@ -1270,6 +1294,9 @@ pub fn run(cli_args: CliArgs) {
                 log::info!("Theme changed to: {:?}", theme);
                 // Re-apply the current tray state with the new theme's icon set
                 utils::refresh_tray_icon(window.app_handle());
+            }
+            tauri::WindowEvent::Moved(_) if window.label() == "recording_overlay" => {
+                overlay::handle_overlay_moved(window.app_handle());
             }
             _ => {}
         })

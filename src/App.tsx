@@ -58,6 +58,17 @@ function App() {
     checkOnboardingStatus();
   }, []);
 
+  useEffect(() => {
+    const unlisten = listen<SidebarSection>("navigate-section", (event) => {
+      if (event.payload in SECTIONS_CONFIG) {
+        setCurrentSection(event.payload);
+      }
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   // Initialize RTL direction when language changes
   useEffect(() => {
     initializeRTL(i18n.language);

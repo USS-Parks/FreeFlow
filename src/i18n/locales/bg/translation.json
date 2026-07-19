@@ -7,7 +7,16 @@
     "unloadModel": "Разтоварване на модела",
     "model": "Модел",
     "quit": "Изход",
-    "cancel": "Отказ"
+    "cancel": "Отказ",
+    "openHub": "Open FreeFlow",
+    "startDictation": "Start Dictation",
+    "stopDictation": "Stop Dictation",
+    "microphone": "Microphone...",
+    "language": "Language...",
+    "history": "History",
+    "statusIdle": "Idle",
+    "statusRecording": "Recording",
+    "statusProcessing": "Processing"
   },
   "sidebar": {
     "general": "Общи",
@@ -305,7 +314,9 @@
           "description": "Показване на визуална обратна връзка при запис и транскрипция. На Linux се препоръчва „Няма“.",
           "options": {
             "bottom": "Долу",
-            "top": "Горе"
+            "top": "Горе",
+            "left": "Left",
+            "right": "Right"
           }
         }
       },
@@ -644,7 +655,11 @@
   },
   "overlay": {
     "transcribing": "Транскрибиране...",
-    "processing": "Обработка..."
+    "processing": "Обработка...",
+    "recording": "Recording",
+    "success": "Done",
+    "warning": "Needs attention",
+    "error": "Error"
   },
   "whatsNew": {
     "title": "Ново в FreeFlow v{{version}}"

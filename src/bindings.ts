@@ -1605,7 +1605,7 @@ export type OrtAcceleratorSetting =
   | "cuda"
   | "directml"
   | "rocm";
-export type OverlayPosition = "top" | "bottom";
+export type OverlayPosition = "top" | "left" | "right" | "bottom";
 /**
  * Which recording overlay to display. `Minimal` and `Live` share one base
  * (the pill); `Live` grows into the panel that shows live transcription text.

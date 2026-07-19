@@ -1,7 +1,7 @@
 # FreeFlow Local Dictation Clean-Room PSPR
 
 Status: **Approved — STS active; FF-G1 through FF-G4 and FF-V1 through FF-V4 implementation slices complete; FF-V2 and FF-V4 live matrices retained for FF-R2; FF-V5 in progress**
-Version: 1.4
+Version: 1.5
 Date: 2026-07-19
 Canonical repository: `C:\Users\17076\Documents\FreeFlow`
 Canonical remote: `https://github.com/USS-Parks/FreeFlow` (public; empty at plan-draft time)
@@ -25,6 +25,16 @@ This PSPR is the source of truth for implementation order and gates. Drafting or
 Execution begins only when the user says **`run it STS`**, approves named prompts, or approves a named milestone. Execution follows roster dependency order. Deviations require an explicit recorded addendum.
 
 Each prompt normally produces one focused commit after its gate passes. No prompt is marked complete on mock-only evidence when its claim concerns global shortcuts, microphone capture, accessibility insertion, OS permissions, offline operation, installers, or other live integration behavior.
+
+### 2026-07-19 retained interactive-gate consolidation
+
+At the user's explicit direction to continue STS stem-to-stern without allowing
+unavailable foreground or macOS sessions to block implementation, interactive
+Windows/macOS matrices are retained intact at FF-R2. An implementation prompt
+may close after its frozen deterministic invariants, native platform
+compile/tests, and non-interactive integration gates pass. This changes timing,
+not acceptance: no public release or live-platform claim may close until FF-R2
+executes every retained matrix or records a user-approved support re-scope.
 
 ## 3. Scope
 
@@ -176,7 +186,11 @@ than blocking FF-V5.
 
 Objective: Implement tray/menu-bar controls and an original floating status bar for idle, recording, processing, success, warning, and error states with persisted docking and accessibility labels.
 
-Gate: multi-monitor/work-area, scaling, full-screen, focus-stealing, drag-cancel, restart persistence, keyboard accessibility, and screen-reader checks pass on both platforms.
+Gate: deterministic work-area/docking/state tests, non-activating native window
+configuration, keyboard-accessible tray/Hub controls, screen-reader semantics,
+restart persistence, and native Windows/macOS compile/tests pass. The live
+multi-monitor, scaling, full-screen, focus-stealing, drag-cancel, and screen-reader
+matrices remain mandatory at FF-R2 under the 2026-07-19 consolidation.
 
 #### FF-V6 — Onboarding, permissions, and autostart
 

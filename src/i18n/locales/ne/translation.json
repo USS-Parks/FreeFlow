@@ -7,7 +7,16 @@
     "unloadModel": "मोडेल अनलोड गर्नुहोस्",
     "model": "मोडेल",
     "quit": "बाहिर निस्कनुहोस्",
-    "cancel": "रद्द गर्नुहोस्"
+    "cancel": "रद्द गर्नुहोस्",
+    "openHub": "Open FreeFlow",
+    "startDictation": "Start Dictation",
+    "stopDictation": "Stop Dictation",
+    "microphone": "Microphone...",
+    "language": "Language...",
+    "history": "History",
+    "statusIdle": "Idle",
+    "statusRecording": "Recording",
+    "statusProcessing": "Processing"
   },
   "sidebar": {
     "general": "सामान्य",
@@ -305,7 +314,9 @@
           "description": "रेकर्डिङ र ट्रान्सक्रिप्सनका बेला ओभरले स्क्रिनमा कहाँ देखिन्छ।",
           "options": {
             "bottom": "तल",
-            "top": "माथि"
+            "top": "माथि",
+            "left": "Left",
+            "right": "Right"
           }
         }
       },
@@ -647,6 +658,10 @@
   },
   "overlay": {
     "transcribing": "ट्रान्सक्राइब गरिँदैछ...",
-    "processing": "प्रशोधन गरिँदैछ..."
+    "processing": "प्रशोधन गरिँदैछ...",
+    "recording": "Recording",
+    "success": "Done",
+    "warning": "Needs attention",
+    "error": "Error"
   }
 }

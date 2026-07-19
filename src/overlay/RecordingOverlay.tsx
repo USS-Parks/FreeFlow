@@ -1,4 +1,4 @@
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import "./RecordingOverlay.css";
@@ -12,7 +12,14 @@ import type {
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import { getLanguageDirection } from "@/lib/utils/rtl";
 
-type OverlayState = "recording" | "streaming" | "transcribing" | "processing";
+type OverlayState =
+  | "recording"
+  | "streaming"
+  | "transcribing"
+  | "processing"
+  | "success"
+  | "warning"
+  | "error";
 
 // Number of reactive bars in the waveform (the simple, smoothed style shared by
 // every overlay form). Mic levels arrive as 16 FFT buckets; we take the first N.
@@ -35,7 +42,9 @@ const RecordingOverlay: React.FC = () => {
   const [session, setSession] = useState(0);
   // Overlay placement (top vs bottom of the screen). The Live panel grows downward
   // from a top overlay (oldest line under the pill) and upward from a bottom one.
-  const [position, setPosition] = useState<"top" | "bottom">("bottom");
+  const [position, setPosition] = useState<"top" | "left" | "right" | "bottom">(
+    "bottom",
+  );
   // True once live text overflows the cap. A top overlay fades its top edge only
   // while overflowing, so the resting first line stays crisp flush under the pill.
   const [overflowing, setOverflowing] = useState(false);
@@ -57,8 +66,11 @@ const RecordingOverlay: React.FC = () => {
         try {
           const settings = await commands.getAppSettings();
           if (settings.status === "ok") {
+            const stored = settings.data.overlay_position;
             setPosition(
-              settings.data.overlay_position === "top" ? "top" : "bottom",
+              stored === "top" || stored === "left" || stored === "right"
+                ? stored
+                : "bottom",
             );
           }
         } catch {
@@ -166,7 +178,8 @@ const RecordingOverlay: React.FC = () => {
   const cancelBtn = (
     <button
       className="sx"
-      aria-label="cancel"
+      aria-label={t("tray.cancel")}
+      title={t("tray.cancel")}
       onClick={() => commands.cancelOperation()}
     >
       <svg viewBox="0 0 16 16" aria-hidden="true">
@@ -179,6 +192,48 @@ const RecordingOverlay: React.FC = () => {
       </svg>
     </button>
   );
+
+  const beginDrag = () => {
+    void emit("overlay-drag-started");
+  };
+
+  const finishDrag = () => {
+    void emit("overlay-drag-finished");
+  };
+
+  const stateLabel =
+    state === "recording"
+      ? t("overlay.recording")
+      : state === "streaming"
+        ? phase === "working"
+          ? workKind === "polishing"
+            ? t("overlay.processing")
+            : t("overlay.transcribing")
+          : t("overlay.recording")
+        : t(`overlay.${state}`);
+
+  if (state === "success" || state === "warning" || state === "error") {
+    return (
+      <div
+        dir={direction}
+        className={`ov-stage ${position} ov-fade ${isVisible ? "show" : ""}`}
+      >
+        <div
+          className={`scard compact sstatus ${state}`}
+          data-tauri-drag-region
+          onPointerDown={beginDrag}
+          onPointerUp={finishDrag}
+          role="status"
+          aria-live={state === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
+          aria-label={stateLabel}
+        >
+          <span className="sstatus-icon" aria-hidden="true" />
+          <span className="sstatus-label">{stateLabel}</span>
+        </div>
+      </div>
+    );
+  }
 
   // dot (left) | waveform (center) | timer + cancel (right) — same structure for
   // pill & panel, so the Live morph is a pure width change.
@@ -226,6 +281,13 @@ const RecordingOverlay: React.FC = () => {
           className={`scard ${open ? "open" : ""} ${collapsed ? "working" : ""} ${
             isVisible ? "" : "leaving"
           }`}
+          data-tauri-drag-region
+          onPointerDown={beginDrag}
+          onPointerUp={finishDrag}
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          aria-label={stateLabel}
         >
           <div className="stext">
             <div className="stext-clip">
@@ -275,6 +337,13 @@ const RecordingOverlay: React.FC = () => {
     >
       <div
         className={`scard compact ${working && isVisible ? "cworking" : ""}`}
+        data-tauri-drag-region
+        onPointerDown={beginDrag}
+        onPointerUp={finishDrag}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+        aria-label={stateLabel}
       >
         {working ? workingRow(workLabel, true) : listeningRow(false, true)}
       </div>

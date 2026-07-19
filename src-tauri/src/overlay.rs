@@ -60,7 +60,12 @@ fn overlay_dimensions(state: &str) -> (f64, f64) {
 }
 
 static LAST_MIC_LEVEL_EMIT: AtomicU64 = AtomicU64::new(0);
+static OVERLAY_PRESENTATION_GENERATION: AtomicU64 = AtomicU64::new(0);
+static OVERLAY_DRAG_ACTIVE: AtomicBool = AtomicBool::new(false);
+static OVERLAY_DRAG_MOVE_GENERATION: AtomicU64 = AtomicU64::new(0);
 const EMIT_THROTTLE_MS: u64 = 33; // ~30 FPS
+const TRANSIENT_STATUS_MS: u64 = 1_400;
+const DRAG_SETTLE_MS: u64 = 250;
 
 #[cfg(target_os = "macos")]
 const OVERLAY_TOP_OFFSET: f64 = 46.0;
@@ -72,6 +77,59 @@ const OVERLAY_BOTTOM_OFFSET: f64 = 15.0;
 
 #[cfg(any(target_os = "windows", target_os = "linux"))]
 const OVERLAY_BOTTOM_OFFSET: f64 = 40.0;
+
+const OVERLAY_SIDE_OFFSET: f64 = 16.0;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct LogicalWorkArea {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+}
+
+fn overlay_position_for_area(
+    position: OverlayPosition,
+    area: LogicalWorkArea,
+    width: f64,
+    height: f64,
+) -> (f64, f64) {
+    match position {
+        OverlayPosition::Top => (
+            area.x + (area.width - width) / 2.0,
+            area.y + OVERLAY_TOP_OFFSET,
+        ),
+        OverlayPosition::Bottom => (
+            area.x + (area.width - width) / 2.0,
+            area.y + area.height - height - OVERLAY_BOTTOM_OFFSET,
+        ),
+        OverlayPosition::Left => (
+            area.x + OVERLAY_SIDE_OFFSET,
+            area.y + (area.height - height) / 2.0,
+        ),
+        OverlayPosition::Right => (
+            area.x + area.width - width - OVERLAY_SIDE_OFFSET,
+            area.y + (area.height - height) / 2.0,
+        ),
+    }
+}
+
+fn nearest_drag_dock(point: (f64, f64), area: LogicalWorkArea) -> OverlayPosition {
+    let left = (point.0 - area.x).abs();
+    let right = (area.x + area.width - point.0).abs();
+    let bottom = (area.y + area.height - point.1).abs();
+    if left <= right && left <= bottom {
+        OverlayPosition::Left
+    } else if right <= bottom {
+        OverlayPosition::Right
+    } else {
+        OverlayPosition::Bottom
+    }
+}
+
+fn transient_generation_is_current(current: u64, scheduled: u64) -> bool {
+    current == scheduled
+}
 
 #[cfg(target_os = "linux")]
 fn update_gtk_layer_shell_anchors(overlay_window: &tauri::webview::WebviewWindow) {
@@ -237,31 +295,104 @@ fn calculate_overlay_position(
 ) -> Option<(f64, f64)> {
     let monitor = get_monitor_with_cursor(app_handle)?;
     let scale = monitor.scale_factor();
-    let monitor_x = monitor.position().x as f64 / scale;
-    let monitor_y = monitor.position().y as f64 / scale;
-    let monitor_width = monitor.size().width as f64 / scale;
-
-    let settings = settings::get_settings(app_handle);
-
-    let x = monitor_x + (monitor_width - width) / 2.0;
-    let y = match settings.overlay_position {
-        OverlayPosition::Top => monitor_y + OVERLAY_TOP_OFFSET,
-        OverlayPosition::Bottom => {
-            // work_area.position shares monitor.position's global coordinate
-            // space, so no monitor offset is added.
-            #[cfg(target_os = "macos")]
-            let bottom = {
-                let wa = monitor.work_area();
-                (wa.position.y as f64 + wa.size.height as f64) / scale
-            };
-            #[cfg(not(target_os = "macos"))]
-            let bottom = monitor_y + monitor.size().height as f64 / scale;
-
-            bottom - height - OVERLAY_BOTTOM_OFFSET
+    #[cfg(any(target_os = "windows", target_os = "macos"))]
+    let area = {
+        let work_area = monitor.work_area();
+        LogicalWorkArea {
+            x: work_area.position.x as f64 / scale,
+            y: work_area.position.y as f64 / scale,
+            width: work_area.size.width as f64 / scale,
+            height: work_area.size.height as f64 / scale,
         }
     };
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let area = LogicalWorkArea {
+        x: monitor.position().x as f64 / scale,
+        y: monitor.position().y as f64 / scale,
+        width: monitor.size().width as f64 / scale,
+        height: monitor.size().height as f64 / scale,
+    };
 
-    Some((x, y))
+    let settings = settings::get_settings(app_handle);
+    Some(overlay_position_for_area(
+        settings.overlay_position,
+        area,
+        width,
+        height,
+    ))
+}
+
+/// Persist the nearest supported dock after a user finishes dragging the
+/// non-activating status bar, then snap it fully inside that monitor's work area.
+pub fn persist_overlay_dock(app_handle: &AppHandle) {
+    let Some(window) = app_handle.get_webview_window("recording_overlay") else {
+        return;
+    };
+    let Ok(position) = window.outer_position() else {
+        return;
+    };
+    let Ok(size) = window.outer_size() else {
+        return;
+    };
+    let center = (
+        position.x as f64 + size.width as f64 / 2.0,
+        position.y as f64 + size.height as f64 / 2.0,
+    );
+    let Ok(monitors) = app_handle.available_monitors() else {
+        return;
+    };
+    let Some(monitor) = monitors.into_iter().find(|monitor| {
+        let p = monitor.position();
+        let s = monitor.size();
+        center.0 >= p.x as f64
+            && center.0 < (p.x as f64 + s.width as f64)
+            && center.1 >= p.y as f64
+            && center.1 < (p.y as f64 + s.height as f64)
+    }) else {
+        return;
+    };
+    let work_area = monitor.work_area();
+    let area = LogicalWorkArea {
+        x: work_area.position.x as f64,
+        y: work_area.position.y as f64,
+        width: work_area.size.width as f64,
+        height: work_area.size.height as f64,
+    };
+    let dock = nearest_drag_dock(center, area);
+    let mut app_settings = settings::get_settings(app_handle);
+    app_settings.overlay_position = dock;
+    settings::write_settings(app_handle, app_settings);
+    update_overlay_position(app_handle);
+}
+
+pub fn begin_overlay_drag() {
+    OVERLAY_DRAG_ACTIVE.store(true, Ordering::Release);
+    OVERLAY_DRAG_MOVE_GENERATION.fetch_add(1, Ordering::AcqRel);
+}
+
+pub fn finish_overlay_drag(app_handle: &AppHandle) {
+    if OVERLAY_DRAG_ACTIVE.swap(false, Ordering::AcqRel) {
+        persist_overlay_dock(app_handle);
+    }
+}
+
+/// Native drags do not consistently deliver a web pointer-up on every OS. A
+/// settled move therefore closes and persists an active drag as a fallback.
+pub fn handle_overlay_moved(app_handle: &AppHandle) {
+    if !OVERLAY_DRAG_ACTIVE.load(Ordering::Acquire) {
+        return;
+    }
+    let generation = OVERLAY_DRAG_MOVE_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
+    let app = app_handle.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(DRAG_SETTLE_MS));
+        if OVERLAY_DRAG_ACTIVE.load(Ordering::Acquire)
+            && OVERLAY_DRAG_MOVE_GENERATION.load(Ordering::Acquire) == generation
+        {
+            OVERLAY_DRAG_ACTIVE.store(false, Ordering::Release);
+            persist_overlay_dock(&app);
+        }
+    });
 }
 
 /// Current overlay window size in logical units (points), for repositioning
@@ -372,13 +503,14 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
     }
 }
 
-fn show_overlay_state(app_handle: &AppHandle, state: &str) {
+fn show_overlay_state(app_handle: &AppHandle, state: &str) -> u64 {
     // Whether the overlay shows at all is governed by overlay_style; position
     // only chooses Top vs Bottom placement.
     let settings = settings::get_settings(app_handle);
     if settings.overlay_style == OverlayStyle::None {
-        return;
+        return 0;
     }
+    let generation = OVERLAY_PRESENTATION_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
 
     // Size the overlay for this state (compact vs. streaming), then position it.
     let (width, height) = overlay_dimensions(state);
@@ -418,6 +550,7 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str) {
             show_elapsed
         );
     }
+    generation
 }
 
 /// Shows the recording overlay window with fade-in animation
@@ -438,6 +571,35 @@ pub fn show_transcribing_overlay(app_handle: &AppHandle) {
 /// Shows the processing overlay window
 pub fn show_processing_overlay(app_handle: &AppHandle) {
     show_overlay_state(app_handle, "processing");
+}
+
+fn show_transient_overlay(app_handle: &AppHandle, state: &'static str) {
+    let generation = show_overlay_state(app_handle, state);
+    if generation == 0 {
+        return;
+    }
+    let app = app_handle.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(TRANSIENT_STATUS_MS));
+        if transient_generation_is_current(
+            OVERLAY_PRESENTATION_GENERATION.load(Ordering::Acquire),
+            generation,
+        ) {
+            hide_recording_overlay(&app);
+        }
+    });
+}
+
+pub fn show_success_overlay(app_handle: &AppHandle) {
+    show_transient_overlay(app_handle, "success");
+}
+
+pub fn show_warning_overlay(app_handle: &AppHandle) {
+    show_transient_overlay(app_handle, "warning");
+}
+
+pub fn show_error_overlay(app_handle: &AppHandle) {
+    show_transient_overlay(app_handle, "error");
 }
 
 /// Updates the overlay window position based on current settings
@@ -461,6 +623,7 @@ pub fn update_overlay_position(app_handle: &AppHandle) {
 
 /// Hides the recording overlay window with fade-out animation
 pub fn hide_recording_overlay(app_handle: &AppHandle) {
+    OVERLAY_PRESENTATION_GENERATION.fetch_add(1, Ordering::AcqRel);
     // Always hide the overlay regardless of settings - if setting was changed while recording,
     // we still want to hide it properly
     if let Some(overlay_window) = app_handle.get_webview_window("recording_overlay") {
@@ -525,4 +688,58 @@ pub fn emit_levels(app_handle: &AppHandle, levels: &[f32]) {
     // eval_script call per callback, cutting the per-callback WebKit
     // dispatch work in half.
     let _ = app_handle.emit_to("recording_overlay", "mic-level", levels);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        nearest_drag_dock, overlay_position_for_area, transient_generation_is_current,
+        LogicalWorkArea,
+    };
+    use crate::settings::OverlayPosition;
+
+    const AREA: LogicalWorkArea = LogicalWorkArea {
+        x: 100.0,
+        y: 50.0,
+        width: 1200.0,
+        height: 800.0,
+    };
+
+    #[test]
+    fn every_dock_stays_inside_the_work_area() {
+        for dock in [
+            OverlayPosition::Top,
+            OverlayPosition::Bottom,
+            OverlayPosition::Left,
+            OverlayPosition::Right,
+        ] {
+            let (x, y) = overlay_position_for_area(dock, AREA, 400.0, 120.0);
+            assert!(x >= AREA.x);
+            assert!(y >= AREA.y);
+            assert!(x + 400.0 <= AREA.x + AREA.width);
+            assert!(y + 120.0 <= AREA.y + AREA.height);
+        }
+    }
+
+    #[test]
+    fn drag_snaps_to_left_right_or_bottom() {
+        assert_eq!(
+            nearest_drag_dock((105.0, 400.0), AREA),
+            OverlayPosition::Left
+        );
+        assert_eq!(
+            nearest_drag_dock((1295.0, 400.0), AREA),
+            OverlayPosition::Right
+        );
+        assert_eq!(
+            nearest_drag_dock((700.0, 845.0), AREA),
+            OverlayPosition::Bottom
+        );
+    }
+
+    #[test]
+    fn stale_transient_cannot_hide_a_newer_state() {
+        assert!(transient_generation_is_current(7, 7));
+        assert!(!transient_generation_is_current(8, 7));
+    }
 }
