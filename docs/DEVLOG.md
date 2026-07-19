@@ -92,6 +92,17 @@ The log is append-only once STS execution begins. A prompt is not complete until
 - Commit SHA: `df5c23c7eb5d8c6d058ae8f695fb3584123b923a`.
 - Deviations or remaining work: Windows project-owned corpus evidence, privileged blocked-network or process packet-trace evidence, additional manifest-approved model candidates, and macOS public/owned quality/latency/memory/offline evidence remain mandatory. The unmodified starting tree has existing `unused-imports`, `dead-code`, `needless-lifetimes`, `needless-return`, `items-after-test-module`, `manual-repeat-n`, and `write-with-newline` findings; strict clippy passed after allowing exactly those inherited lint classes, while the sole FF-V3 evaluator finding was corrected. Bun was unavailable on PATH, so the unchanged installed dependency tree was used directly for frontend gates; no frozen-install result is claimed. No FF-V4 work began.
 
+### 2026-07-18 — FF-V3 hosted gate continuation (in progress)
+
+- Objective: Complete the revised FF-V3 gate without foreground interaction by retaining public-corpus, performance, memory, model-identity, and real zero-network evidence on hosted Windows, Apple Silicon macOS, and Intel macOS runners.
+- Starting commit: `9ba4a08c893ee7bb336b772e57361b3a2d536f25` on canonical `main`.
+- Authorized rescope: the user explicitly moved consented project-owned corpus evidence to the later release gate. It remains mandatory before release and is not replaced with synthetic evidence.
+- Implementation: add a manifest-consent-bound headless local-model installer; add a same-process numeric TCP denial probe to corpus results; reproduce the exact hashed LibriSpeech subset; run the production evaluator under a Windows program-scoped outbound firewall rule or macOS network-denying sandbox; retain host, executable, install, isolation, stderr, and JSON evidence as workflow artifacts.
+- Local verification: 153/153 ordinary Rust tests passed with 2 live-model tests ignored; warnings-denied FF-V3 clippy delta passed with the seven documented inherited lint classes allowed; ESLint, service-boundary, 22-catalog translation, TypeScript, Vite production build, Prettier, Rustfmt, PowerShell/Bash syntax, Actionlint/ShellCheck with the previously proven hosted Intel runner label allowlisted, provenance, and diff checks passed. The corpus preparation script reproduced all 20 WAV inputs from the retained hash-verified archive.
+- Result: pending hosted run.
+- Commit SHA: pending.
+- Remaining work: FF-V3 cannot close and FF-V4 cannot begin until the hosted matrix passes and its retained artifacts are reviewed and committed.
+
 ## Entry template
 
 ### YYYY-MM-DD — FF-XX

@@ -322,6 +322,42 @@ fn show_main_window_command(app: AppHandle) -> Result<(), String> {
 fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
     use std::time::Instant;
 
+    if let Some(source_path) = args.install_model_file.as_deref() {
+        let model_id = args
+            .model
+            .as_deref()
+            .expect("clap requires --model with --install-model-file");
+        let accepted_manifest_digest = args
+            .accept_model_manifest_digest
+            .as_deref()
+            .expect("clap requires manifest acceptance with --install-model-file");
+        let model_manager = app.state::<Arc<ModelManager>>();
+        match model_manager.install_model_from_file(model_id, source_path, accepted_manifest_digest)
+        {
+            Ok(()) => {
+                if args.json {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "schema_version": 1,
+                            "model_id": model_id,
+                            "source": source_path,
+                            "manifest_digest": accepted_manifest_digest,
+                            "installed": true,
+                        })
+                    );
+                } else {
+                    println!("Installed and verified model '{model_id}'.");
+                }
+                return 0;
+            }
+            Err(error) => {
+                eprintln!("error: local model install failed: {error:#}");
+                return 1;
+            }
+        }
+    }
+
     if let Some(seconds) = args.verify_audio {
         return run_headless_audio_verification(app, seconds.max(1), args.repeat, args.json);
     }
@@ -568,6 +604,17 @@ fn run_headless_corpus_evaluation(
         return 2;
     }
 
+    let network_denial = match args.require_network_denied.as_deref() {
+        Some(target) => match crate::asr_evaluation::require_network_denied(target) {
+            Ok(evidence) => Some(evidence),
+            Err(error) => {
+                eprintln!("error: {error:#}");
+                return 1;
+            }
+        },
+        None => None,
+    };
+
     let manager = app.state::<Arc<TranscriptionManager>>();
     let resident_memory_before_load_bytes = resident_memory_bytes();
     if let Err(error) = manager.load_model_with_device(&model_id, args.device_index) {
@@ -706,6 +753,7 @@ fn run_headless_corpus_evaluation(
         resident_memory_before_load_bytes,
         resident_memory_after_load_bytes,
         resident_memory_after_evaluation_bytes,
+        network_denial,
         thresholds,
         passed,
         items: scores,
@@ -960,6 +1008,7 @@ pub fn run(cli_args: CliArgs) {
     // note below), not forward to an already-running app.
     let headless_mode = cli_args.transcribe_file.is_some()
         || cli_args.evaluate_corpus.is_some()
+        || cli_args.install_model_file.is_some()
         || cli_args.list_devices
         || cli_args.list_models
         || cli_args.verify_audio.is_some();

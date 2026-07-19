@@ -75,9 +75,17 @@ pub struct EvaluationSummary {
     pub resident_memory_before_load_bytes: Option<u64>,
     pub resident_memory_after_load_bytes: Option<u64>,
     pub resident_memory_after_evaluation_bytes: Option<u64>,
+    pub network_denial: Option<NetworkDenialEvidence>,
     pub thresholds: EvaluationThresholdsResult,
     pub passed: bool,
     pub items: Vec<ItemScore>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct NetworkDenialEvidence {
+    pub target: String,
+    pub denied: bool,
+    pub error: String,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -256,6 +264,26 @@ pub fn percentile(values: &[u64], percentile: f64) -> u64 {
     sorted[rank.min(sorted.len() - 1)]
 }
 
+pub fn require_network_denied(target: &str) -> Result<NetworkDenialEvidence> {
+    use std::net::{SocketAddr, TcpStream};
+    use std::time::Duration;
+
+    let address: SocketAddr = target
+        .parse()
+        .with_context(|| format!("network denial target must be a numeric IP:port: {target}"))?;
+    match TcpStream::connect_timeout(&address, Duration::from_secs(3)) {
+        Ok(stream) => {
+            drop(stream);
+            bail!("network denial probe unexpectedly connected to {target}")
+        }
+        Err(error) => Ok(NetworkDenialEvidence {
+            target: target.to_string(),
+            denied: true,
+            error: error.to_string(),
+        }),
+    }
+}
+
 #[cfg(windows)]
 pub fn resident_memory_bytes() -> Option<u64> {
     use std::mem::size_of;
@@ -345,5 +373,12 @@ mod tests {
     fn percentile_uses_nearest_rank() {
         assert_eq!(percentile(&[10, 40, 20, 30], 0.5), 20);
         assert_eq!(percentile(&[10, 40, 20, 30], 0.95), 40);
+    }
+
+    #[test]
+    fn network_denial_probe_rejects_non_numeric_targets() {
+        let error =
+            require_network_denied("example.com:443").expect_err("numeric address required");
+        assert!(error.to_string().contains("numeric IP:port"));
     }
 }

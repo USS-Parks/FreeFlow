@@ -1,7 +1,7 @@
 # FreeFlow Local Dictation Clean-Room PSPR
 
 Status: **Approved — STS active; FF-G1 through FF-G4 and FF-V1 complete; FF-V2 user-deferred; FF-V3 in progress by explicit override**
-Version: 1.0
+Version: 1.1
 Date: 2026-07-18
 Canonical repository: `C:\Users\17076\Documents\FreeFlow`
 Canonical remote: `https://github.com/USS-Parks/FreeFlow` (public; empty at plan-draft time)
@@ -160,7 +160,7 @@ Gate: Unit/integration state tests pass; live microphone selection and hot-plug 
 
 Objective: Connect captured audio to the selected local engine, support language selection/detection, surface progress/errors, and preserve recoverable raw transcripts.
 
-Gate: Public/owned corpus results and latency/memory measurements are recorded for the model matrix; the selected default meets frozen thresholds on both reference platforms; zero network is required.
+Gate: Public-corpus results and latency/memory measurements are recorded for the approved model matrix; the selected default meets frozen thresholds on both reference platforms; zero network is required. By explicit 2026-07-18 rescope, consented project-owned corpus evidence remains mandatory at the later release gate rather than FF-V3.
 
 #### FF-V4 — Reliable cross-application insertion
 
@@ -353,6 +353,7 @@ The initiative is complete only when:
 | 2026-07-18 | 0.8 execution WIP | FF-V2 gate candidate `af7a3b2746737eec869344cbb5f2387b0d55ef75` adds truthful selected-device failure/rollback, typed microphone diagnostics and dictation lifecycle events, atomic pre-ASR WAV persistence with restart recovery, explicit cancellation policy, a commit-pinned bundled Silero V4 artifact with hash/license provenance, and a production-path headless microphone verifier                                                                                                                                           | Windows default-microphone capture passed 50/50 cycles and cancellation returned idle; interactive 150 ms feedback, first-word, physical hot-plug/contention, sleep/wake, and macOS live evidence remain required, so FF-V2 is not complete |
 | 2026-07-18 | 0.9 execution WIP | FF-V2 correction `e6e44dcd969d5da0ee0ceb8c2f38a471d3f9db8a` separates headless microphone-ready timing from the interactive 150 ms feedback gate and measures application feedback from shortcut receipt; a second Windows headless run passed 50/50 captures with 164.21 ms microphone-ready p95 and explicit `feedback_gate_measured: false`                                                                                                                                                                                         | FF-V2 remains in progress; no interactive Windows or macOS evidence is inferred, and the foreground-dependent matrix is deferred so the user can continue using the host                                                                    |
 | 2026-07-18 | 1.0 execution WIP | The user explicitly deferred the remaining FF-V2 live matrix to a separate macOS machine and directed STS to begin FF-V3 immediately from clean commit `2361db37020e779865d50fc9886cff17e3790677` on `codex/ff-v3-local-asr`; FF-V3 freezes its quality/resource thresholds before retained benchmarking and adds a headless public/owned corpus evaluator                                                                                                                                                                             | This is an authorized roster-order deviation, not an FF-V2 pass. FF-V2 stays incomplete; FF-V3 is in progress and FF-V4 must not begin until FF-V3 passes                                                                                   |
+| 2026-07-18 | 1.1 execution WIP | The user explicitly moved the consented project-owned dictation corpus from the FF-V3 completion gate to the later release gate. FF-V3 continues to require public-corpus quality, latency, memory, exact model identity, and real zero-network evidence on Windows and macOS; owned-corpus capture/evaluation remains mandatory before release rather than being waived.                                                                                                                                                              | This rescope permits unattended hosted FF-V3 completion without manufacturing synthetic "owned" evidence. FF-V4 remains blocked until the revised FF-V3 gate passes                                                                         |
 
 ## 14. Public research basis
 

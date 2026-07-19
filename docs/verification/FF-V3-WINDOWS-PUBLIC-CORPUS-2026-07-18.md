@@ -78,12 +78,15 @@ denied` because this session lacks administrator rights.
 
 FF-V3 therefore remains open for:
 
-1. a consented project-owned dictation corpus on Windows;
-2. Windows process-level blocked-network or packet-trace evidence with suitable
+1. Windows process-level blocked-network or packet-trace evidence with suitable
    privileges;
-3. the same public/owned corpus, quality, latency, memory, and blocked-network
+2. the same public corpus, quality, latency, memory, and blocked-network
    evidence on the macOS reference host; and
-4. any additional model-matrix candidate after it receives an FF-V1-compliant
+3. any additional model-matrix candidate after it receives an FF-V1-compliant
    immutable manifest and explicit installation consent.
+
+By explicit user rescope later on 2026-07-18, the consented project-owned
+dictation corpus remains mandatory at the later release gate rather than FF-V3.
+It is deferred, not waived or replaced with synthetic evidence.
 
 No FF-V4 work is authorized or started by this evidence.

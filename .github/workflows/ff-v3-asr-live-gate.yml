@@ -1,0 +1,236 @@
+name: FF-V3 ASR live gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      accept_nvidia_open_model_license:
+        description: "I reviewed and accept the NVIDIA Open Model License linked in the checked-in Parakeet manifest"
+        required: true
+        default: false
+        type: boolean
+      accept_conversion_cc_by_4_0:
+        description: "I reviewed and accept the GGUF conversion repository's CC-BY-4.0 declaration"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ff-v3-asr-live-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  consent:
+    name: Verify explicit model-license consent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require license acknowledgements
+        env:
+          ACCEPT_NVIDIA_OML: ${{ inputs.accept_nvidia_open_model_license }}
+          ACCEPT_CONVERSION_CC_BY: ${{ inputs.accept_conversion_cc_by_4_0 }}
+        run: |
+          test "$ACCEPT_NVIDIA_OML" = "true"
+          test "$ACCEPT_CONVERSION_CC_BY" = "true"
+
+  evaluate:
+    name: Evaluate (${{ matrix.platform }})
+    needs: consent
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            platform: windows-x86_64
+            family: windows
+            install_onnxruntime: false
+          - runner: macos-15
+            platform: macos-arm64
+            family: macos
+            install_onnxruntime: false
+          - runner: macos-15-intel
+            platform: macos-x86_64
+            family: macos
+            install_onnxruntime: true
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      CMAKE_ARGS: -DGGML_NATIVE=OFF
+      FFV3_MANIFEST_DIGEST: 0c6a40bac30ebe258d963f76e98a49b078d1a1dd426b4d4d530c6e6bf88a7186
+      FFV3_MODEL_ID: parakeet-unified-en-0.6b-q8_0
+      FFV3_MODEL_SHA256: 4b50b6dd862bf6e346929aaf4f5eaacec003bfa3f56462d6c874b41ef2f38795
+      FFV3_CORPUS_SHA256: 39fde525e59672dc6d1551919b1478f724438a95aa55f874b576be21967e6c23
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Confirm runner architecture
+        if: matrix.family == 'macos'
+        env:
+          EXPECTED_ARCH: ${{ matrix.platform == 'macos-arm64' && 'arm64' || 'x86_64' }}
+        run: test "$(uname -m)" = "$EXPECTED_ARCH"
+
+      - name: Install Vulkan SDK
+        if: matrix.family == 'windows'
+        shell: pwsh
+        run: |
+          winget install --id KhronosGroup.VulkanSDK --exact --accept-package-agreements --accept-source-agreements --disable-interactivity
+          $sdk = Get-ChildItem -LiteralPath C:\VulkanSDK -Directory |
+            Sort-Object { [version]$_.Name } -Descending |
+            Select-Object -First 1
+          if ($null -eq $sdk) { throw "Vulkan SDK was not installed" }
+          "VULKAN_SDK=$($sdk.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "$($sdk.FullName)\Bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Install macOS evaluation dependencies
+        if: matrix.family == 'macos'
+        run: brew install flac
+
+      - name: Supply Intel ONNX Runtime link dependency
+        if: matrix.install_onnxruntime
+        run: |
+          brew install onnxruntime
+          {
+            echo "ORT_LIB_LOCATION=$(brew --prefix onnxruntime)/lib"
+            echo "ORT_PREFER_DYNAMIC_LINK=1"
+            echo "DYLD_LIBRARY_PATH=$(brew --prefix onnxruntime)/lib"
+          } >> "$GITHUB_ENV"
+
+      - name: Build production evaluator
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+
+      - name: Download and verify Windows inputs
+        if: matrix.family == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path ff-v3-inputs,ff-v3-artifacts -Force | Out-Null
+          curl.exe --fail --location --retry 4 --output ff-v3-inputs\model.gguf "https://huggingface.co/memoravox/parakeet-unified-en-0.6b-gguf/resolve/17cf15519695fed7891fe1e81bfc512f3a58cc7b/parakeet-unified-en-0.6b-Q8_0.gguf"
+          curl.exe --fail --location --retry 4 --output ff-v3-inputs\test-clean.tar.gz "https://www.openslr.org/resources/12/test-clean.tar.gz"
+          curl.exe --fail --location --retry 4 --output ff-v3-inputs\flac-1.5.0-win.zip "https://ftp.osuosl.org/pub/xiph/releases/flac/flac-1.5.0-win.zip"
+          if ((Get-FileHash ff-v3-inputs\model.gguf -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:FFV3_MODEL_SHA256) { throw "Model SHA-256 mismatch" }
+          if ((Get-FileHash ff-v3-inputs\test-clean.tar.gz -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:FFV3_CORPUS_SHA256) { throw "Corpus SHA-256 mismatch" }
+          if ((Get-FileHash ff-v3-inputs\flac-1.5.0-win.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne "53f1500f0d6e7c61379d7fee50d4a9f7f504c650009506d9ba015530d76c0dde") { throw "FLAC tool SHA-256 mismatch" }
+          Expand-Archive -LiteralPath ff-v3-inputs\flac-1.5.0-win.zip -DestinationPath ff-v3-inputs\flac -Force
+          $flac = Get-ChildItem ff-v3-inputs\flac -Filter flac.exe -Recurse | Where-Object { $_.FullName -match 'win64' } | Select-Object -First 1
+          if ($null -eq $flac) { throw "64-bit FLAC decoder not found" }
+          "FFV3_FLAC_EXE=$($flac.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Download and verify macOS inputs
+        if: matrix.family == 'macos'
+        run: |
+          mkdir -p ff-v3-inputs ff-v3-artifacts
+          curl --fail --location --retry 4 --output ff-v3-inputs/model.gguf "https://huggingface.co/memoravox/parakeet-unified-en-0.6b-gguf/resolve/17cf15519695fed7891fe1e81bfc512f3a58cc7b/parakeet-unified-en-0.6b-Q8_0.gguf"
+          curl --fail --location --retry 4 --output ff-v3-inputs/test-clean.tar.gz "https://www.openslr.org/resources/12/test-clean.tar.gz"
+          test "$(shasum -a 256 ff-v3-inputs/model.gguf | awk '{print $1}')" = "$FFV3_MODEL_SHA256"
+          test "$(shasum -a 256 ff-v3-inputs/test-clean.tar.gz | awk '{print $1}')" = "$FFV3_CORPUS_SHA256"
+
+      - name: Prepare Windows corpus
+        if: matrix.family == 'windows'
+        shell: pwsh
+        run: >-
+          pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\prepare-ff-v3-corpus.ps1
+          -Archive ff-v3-inputs\test-clean.tar.gz
+          -Manifest docs\verification\corpora\ff-v3-librispeech-test-clean-20.json
+          -ExtractionRoot ff-v3-inputs\corpus
+          -OutputDirectory docs\verification\corpora\eval-wav
+          -FlacExecutable $env:FFV3_FLAC_EXE
+
+      - name: Prepare macOS corpus
+        if: matrix.family == 'macos'
+        run: >-
+          bash scripts/prepare-ff-v3-corpus.sh
+          ff-v3-inputs/test-clean.tar.gz
+          docs/verification/corpora/ff-v3-librispeech-test-clean-20.json
+          ff-v3-inputs/corpus
+          docs/verification/corpora/eval-wav
+
+      - name: Prepare portable evaluator
+        if: matrix.family == 'windows'
+        shell: pwsh
+        run: |
+          Set-Content -LiteralPath src-tauri\target\release\portable -Value "FreeFlow Portable Mode"
+          New-Item -ItemType Directory -Path src-tauri\target\release\Data\models -Force | Out-Null
+
+      - name: Prepare portable evaluator
+        if: matrix.family == 'macos'
+        run: |
+          printf '%s\n' 'FreeFlow Portable Mode' > src-tauri/target/release/portable
+          mkdir -p src-tauri/target/release/Data/models
+
+      - name: Install verified model on Windows
+        if: matrix.family == 'windows'
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath src-tauri\target\release\freeflow.exe -WindowStyle Hidden -Wait -PassThru `
+            -ArgumentList @("--install-model-file", "ff-v3-inputs\model.gguf", "--model", $env:FFV3_MODEL_ID, "--accept-model-manifest-digest", $env:FFV3_MANIFEST_DIGEST, "--json") `
+            -RedirectStandardOutput ff-v3-artifacts\install.json -RedirectStandardError ff-v3-artifacts\install.stderr.txt
+          if ($process.ExitCode -ne 0) { throw "Model install failed with exit code $($process.ExitCode)" }
+
+      - name: Install verified model on macOS
+        if: matrix.family == 'macos'
+        run: |
+          src-tauri/target/release/freeflow \
+            --install-model-file ff-v3-inputs/model.gguf \
+            --model "$FFV3_MODEL_ID" \
+            --accept-model-manifest-digest "$FFV3_MANIFEST_DIGEST" \
+            --json > ff-v3-artifacts/install.json 2> ff-v3-artifacts/install.stderr.txt
+
+      - name: Evaluate with Windows outbound traffic denied
+        if: matrix.family == 'windows'
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path src-tauri\target\release\freeflow.exe).Path
+          $ruleName = "FreeFlow-FF-V3-$env:GITHUB_RUN_ID-$env:GITHUB_RUN_ATTEMPT"
+          New-NetFirewallRule -DisplayName $ruleName -Direction Outbound -Program $exe -Action Block | Out-Null
+          Get-NetFirewallRule -DisplayName $ruleName | Format-List * | Out-File ff-v3-artifacts\network-deny-rule.txt
+          try {
+            $process = Start-Process -FilePath $exe -WindowStyle Hidden -Wait -PassThru `
+              -ArgumentList @("--evaluate-corpus", "docs\verification\corpora\ff-v3-librispeech-test-clean-20.json", "--model", $env:FFV3_MODEL_ID, "--require-network-denied", "1.1.1.1:443", "--json") `
+              -RedirectStandardOutput "ff-v3-artifacts\${{ matrix.platform }}.json" -RedirectStandardError "ff-v3-artifacts\${{ matrix.platform }}.stderr.txt"
+            if ($process.ExitCode -ne 0) { throw "Evaluation failed with exit code $($process.ExitCode)" }
+          } finally {
+            Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+          }
+
+      - name: Evaluate under macOS network-denying sandbox
+        if: matrix.family == 'macos'
+        run: |
+          cat > ff-v3-artifacts/network-deny.sb <<'EOF'
+          (version 1)
+          (allow default)
+          (deny network*)
+          EOF
+          sandbox-exec -f ff-v3-artifacts/network-deny.sb \
+            src-tauri/target/release/freeflow \
+            --evaluate-corpus docs/verification/corpora/ff-v3-librispeech-test-clean-20.json \
+            --model "$FFV3_MODEL_ID" \
+            --require-network-denied 1.1.1.1:443 \
+            --json > "ff-v3-artifacts/${{ matrix.platform }}.json" \
+            2> "ff-v3-artifacts/${{ matrix.platform }}.stderr.txt"
+
+      - name: Record host and artifact identity
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p ff-v3-artifacts
+          {
+            echo "platform=${{ matrix.platform }}"
+            echo "runner=${{ matrix.runner }}"
+            echo "commit=$GITHUB_SHA"
+            uname -a || true
+          } > "ff-v3-artifacts/${{ matrix.platform }}-host.txt"
+          if [[ "${{ matrix.family }}" == "windows" ]]; then
+            certutil -hashfile src-tauri/target/release/freeflow.exe SHA256 > "ff-v3-artifacts/${{ matrix.platform }}-executable-sha256.txt" || true
+          else
+            shasum -a 256 src-tauri/target/release/freeflow > "ff-v3-artifacts/${{ matrix.platform }}-executable-sha256.txt" || true
+          fi
+
+      - name: Upload retained evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ff-v3-${{ matrix.platform }}-${{ github.run_attempt }}
+          path: ff-v3-artifacts/
+          if-no-files-found: error
+          retention-days: 30

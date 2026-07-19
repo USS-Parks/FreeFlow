@@ -39,8 +39,30 @@ pub struct CliArgs {
     #[arg(long, value_name = "JSON")]
     pub evaluate_corpus: Option<PathBuf>,
 
-    /// Model id to load for --transcribe-file or --evaluate-corpus (default:
-    /// the selected model).
+    /// Before corpus evaluation, require a TCP connection attempt to this
+    /// numeric IP:port to fail. Used with an OS-enforced outbound deny rule to
+    /// retain same-process zero-network evidence.
+    #[arg(long, value_name = "IP:PORT", requires = "evaluate_corpus")]
+    pub require_network_denied: Option<String>,
+
+    /// Verify and install a local model artifact through the approved manifest.
+    /// Requires --model and --accept-model-manifest-digest. No network request
+    /// is made by this command.
+    #[arg(
+        long,
+        value_name = "FILE",
+        requires = "model",
+        requires = "accept_model_manifest_digest"
+    )]
+    pub install_model_file: Option<PathBuf>,
+
+    /// Exact digest of the approved model manifest whose source, hash, size,
+    /// licenses, and destination were reviewed before --install-model-file.
+    #[arg(long, value_name = "SHA256")]
+    pub accept_model_manifest_digest: Option<String>,
+
+    /// Model id to install or load for a headless operation (default for
+    /// transcription/evaluation: the selected model).
     #[arg(long)]
     pub model: Option<String>,
 
@@ -71,4 +93,47 @@ pub struct CliArgs {
     /// Emit headless results as JSON. Corpus evaluation is always JSON.
     #[arg(long)]
     pub json: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn local_model_install_requires_explicit_manifest_acceptance() {
+        assert!(CliArgs::try_parse_from([
+            "freeflow",
+            "--install-model-file",
+            "model.gguf",
+            "--model",
+            "approved-model"
+        ])
+        .is_err());
+        assert!(CliArgs::try_parse_from([
+            "freeflow",
+            "--install-model-file",
+            "model.gguf",
+            "--model",
+            "approved-model",
+            "--accept-model-manifest-digest",
+            "digest"
+        ])
+        .is_ok());
+    }
+
+    #[test]
+    fn network_denial_probe_is_scoped_to_corpus_evaluation() {
+        assert!(
+            CliArgs::try_parse_from(["freeflow", "--require-network-denied", "1.1.1.1:443"])
+                .is_err()
+        );
+        assert!(CliArgs::try_parse_from([
+            "freeflow",
+            "--evaluate-corpus",
+            "corpus.json",
+            "--require-network-denied",
+            "1.1.1.1:443"
+        ])
+        .is_ok());
+    }
 }

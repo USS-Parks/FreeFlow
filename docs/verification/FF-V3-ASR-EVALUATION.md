@@ -1,6 +1,6 @@
 # FF-V3 local ASR evaluation gate
 
-Status: **Gate implementation in progress; no platform pass is recorded yet**
+Status: **Windows public-corpus thresholds passed; hosted cross-platform and zero-network evidence in progress**
 
 This document freezes the FF-V3 quality and resource thresholds before the
 first retained corpus benchmark. It supplements the release-level constraints
@@ -32,12 +32,16 @@ all three RSS snapshots so later model candidates can be compared directly.
 
 ## Corpus contract
 
-The gate requires both of these sets on each reference platform:
+The FF-V3 gate requires this set on each reference platform:
 
 1. A reproducible public English corpus subset with source revision or archive
    hash, license, exact item IDs, and unmodified references.
-2. A consented, project-owned dictation set covering the first word, names,
-   numbers, negation, paths/identifiers, pauses, and at least one noisy sample.
+
+By explicit user rescope on 2026-07-18, a consented, project-owned dictation set
+covering the first word, names, numbers, negation, paths/identifiers, pauses,
+and at least one noisy sample is a later release gate. It remains mandatory
+before release and must not be replaced with synthetic audio represented as
+human-owned evidence.
 
 Every input must be 16 kHz mono 16-bit PCM WAV. Corpus audio is not committed
 unless its license and consent permit redistribution. A retained manifest can
@@ -66,15 +70,18 @@ passed; 1 means a runtime or threshold failure; 2 means invalid corpus input.
 ## Offline proof
 
 After the FF-V1 model is installed, deny outbound traffic for the process before
-launching the evaluator. Retain the deny rule or process-level trace together
-with the JSON result. The evaluator has no download path and a missing model is
-a hard failure. A mock-only or source-inspection claim is not sufficient for the
-zero-network gate.
+launching the evaluator. Pass `--require-network-denied <numeric-ip:port>` so
+the evaluator itself attempts and records a blocked connection before loading
+the model. Retain the Windows program-scoped firewall rule or macOS sandbox
+profile together with the JSON result. The evaluator has no download path and a
+missing model is a hard failure. A mock-only, proxy-only, or source-inspection
+claim is not sufficient for the zero-network gate.
 
 ## Completion rule
 
-FF-V3 remains open until public and owned results, platform manifests, model
-identity/hash, memory measurements, and zero-network evidence pass on Windows
-and macOS. The user explicitly deferred FF-V2's remaining live work to a
-separate Mac; that deferral does not convert FF-V2 into a pass and does not
-waive any FF-V3 platform evidence.
+FF-V3 remains open until public-corpus results, platform manifests, model
+identity/hash, memory measurements, and real zero-network evidence pass on
+Windows and macOS. Project-owned corpus evidence remains a mandatory later
+release gate under the explicit 2026-07-18 rescope. The user's separate deferral
+of FF-V2 does not convert FF-V2 into a pass or waive any revised FF-V3 platform
+evidence.
