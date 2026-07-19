@@ -95,3 +95,26 @@ FreeFlow retains an evaluation manifest and machine-readable result for a
 
 The corpus is used only for independent local-ASR measurement and does not
 originate from Wispr Flow or any proprietary observation.
+
+## Optional local transform runtime and model
+
+FreeFlow can install, but does not bundle or redistribute, the exact optional
+local transform artifacts declared in
+`models/manifests/smollm2-135m-instruct-q4_k_m.json` and
+`src-tauri/src/local_transform.rs`. No transfer begins until the user reviews
+and accepts the combined manifest digest.
+
+- Runtime: `ggml-org/llama.cpp` release `b10068`, source revision
+  `571d0d540df04f25298d0e159e520d9fc62ed121`, MIT License, llama.cpp
+  contributors.
+- Base model: `HuggingFaceTB/SmolLM2-135M-Instruct` revision
+  `7e27bd9f95328f0f3b08261d1252705110c806f8`, Apache-2.0,
+  HuggingFaceTB SmolLM2 contributors.
+- GGUF artifact: `bartowski/SmolLM2-135M-Instruct-GGUF` revision
+  `09816acd5d99df7be770d85ea30822623dab342c`, Apache-2.0, quantized by
+  bartowski with llama.cpp b3991.
+
+The application verifies the selected platform archive and
+`SmolLM2-135M-Instruct-Q4_K_M.gguf` by exact size and SHA-256 before execution.
+The managed runtime binds only to loopback while processing and is deleted from
+the local data directory on request.

@@ -1,0 +1,107 @@
+name: FF-A1 local transform live gate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/ff-a1-local-transform-live-gate.yml
+      - models/manifests/smollm2-135m-instruct-q4_k_m.json
+      - src-tauri/src/local_transform.rs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ff-a1-local-transform-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-cpu-vulkan:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify CPU and Vulkan runtime paths
+        shell: pwsh
+        run: |
+          $runtimeUrl = 'https://github.com/ggml-org/llama.cpp/releases/download/b10068/llama-b10068-bin-win-vulkan-x64.zip'
+          $modelUrl = 'https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/09816acd5d99df7be770d85ea30822623dab342c/SmolLM2-135M-Instruct-Q4_K_M.gguf'
+          Invoke-WebRequest -Uri $runtimeUrl -OutFile runtime.zip
+          Invoke-WebRequest -Uri $modelUrl -OutFile model.gguf
+          if ((Get-Item runtime.zip).Length -ne 33271704) { throw 'runtime size mismatch' }
+          if ((Get-FileHash runtime.zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne '4f3e6fd215fdf22d2fd6232a5501f9e791a93d9193db4faf59e391eff90f6169') { throw 'runtime hash mismatch' }
+          if ((Get-Item model.gguf).Length -ne 105454432) { throw 'model size mismatch' }
+          if ((Get-FileHash model.gguf -Algorithm SHA256).Hash.ToLowerInvariant() -ne '2e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d') { throw 'model hash mismatch' }
+          Expand-Archive runtime.zip runtime
+          $evidence = @()
+          foreach ($mode in @(@{ name='cpu'; layers='0' }, @{ name='vulkan'; layers='99' })) {
+            $port = if ($mode.name -eq 'cpu') { 18080 } else { 18081 }
+            $arguments = @('--model', "$pwd\model.gguf", '--host', '127.0.0.1', '--port', $port, '--ctx-size', '2048', '--threads', '4', '--gpu-layers', $mode.layers, '--parallel', '1', '--no-webui', '--no-slots', '--log-disable')
+            $started = Get-Date
+            $server = Start-Process -FilePath "$pwd\runtime\llama-server.exe" -ArgumentList $arguments -PassThru -WindowStyle Hidden
+            try {
+              $ready = $false
+              foreach ($attempt in 1..200) {
+                try { Invoke-RestMethod "http://127.0.0.1:$port/health" | Out-Null; $ready = $true; break } catch { Start-Sleep -Milliseconds 100 }
+              }
+              if (-not $ready) { throw "$($mode.name) server did not become ready" }
+              $body = @{ model='smollm2-135m-instruct-q4-k-m'; messages=@(@{role='system';content='Clean punctuation and capitalization only. Return only the cleaned text.'},@{role='user';content='hello world period'}); temperature=0; max_tokens=35; stream=$false } | ConvertTo-Json -Depth 6
+              $response = Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:$port/v1/chat/completions" -ContentType 'application/json' -Body $body
+              $output = $response.choices[0].message.content.Trim()
+              if ([string]::IsNullOrWhiteSpace($output)) { throw "$($mode.name) returned no text" }
+              $evidence += @{ acceleration=$mode.name; elapsed_ms=[int]((Get-Date)-$started).TotalMilliseconds; output=$output }
+            } finally {
+              Stop-Process -Id $server.Id -Force -ErrorAction SilentlyContinue
+            }
+          }
+          $evidence | ConvertTo-Json | Set-Content ff-a1-windows-evidence.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ff-a1-windows-evidence
+          path: ff-a1-windows-evidence.json
+
+  macos-cpu-metal:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify CPU and Metal runtime paths
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_url='https://github.com/ggml-org/llama.cpp/releases/download/b10068/llama-b10068-bin-macos-arm64.tar.gz'
+          model_url='https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/09816acd5d99df7be770d85ea30822623dab342c/SmolLM2-135M-Instruct-Q4_K_M.gguf'
+          curl --fail --location --retry 3 "$runtime_url" --output runtime.tar.gz
+          curl --fail --location --retry 3 "$model_url" --output model.gguf
+          test "$(stat -f%z runtime.tar.gz)" = '10603591'
+          test "$(shasum -a 256 runtime.tar.gz | cut -d' ' -f1)" = '13aa2d40c76ad1dcb8ebeec5f0d2814bf3b2f84a66935c7d4dc6f7cca8e38d68'
+          test "$(stat -f%z model.gguf)" = '105454432'
+          test "$(shasum -a 256 model.gguf | cut -d' ' -f1)" = '2e8040ceae7815abe0dcb3540b9995eaa1fa0d2ca9e797d0a635ae4433c68c2d'
+          tar -xzf runtime.tar.gz
+          : > ff-a1-macos-evidence.jsonl
+          for mode in cpu metal; do
+            if [[ "$mode" = cpu ]]; then layers=0; port=18080; else layers=99; port=18081; fi
+            started=$(python3 -c 'import time; print(int(time.time()*1000))')
+            ./llama-b10068/llama-server --model "$PWD/model.gguf" --host 127.0.0.1 --port "$port" --ctx-size 2048 --threads 4 --gpu-layers "$layers" --parallel 1 --no-webui --no-slots --log-disable &
+            server_pid=$!
+            cleanup() { kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; }
+            trap cleanup EXIT
+            ready=false
+            for _ in $(seq 1 200); do
+              if curl --silent --fail "http://127.0.0.1:$port/health" >/dev/null; then ready=true; break; fi
+              sleep 0.1
+            done
+            test "$ready" = true
+            response=$(curl --silent --fail --request POST "http://127.0.0.1:$port/v1/chat/completions" --header 'Content-Type: application/json' --data-binary '{"model":"smollm2-135m-instruct-q4-k-m","messages":[{"role":"system","content":"Clean punctuation and capitalization only. Return only the cleaned text."},{"role":"user","content":"hello world period"}],"temperature":0,"max_tokens":35,"stream":false}')
+            output=$(python3 -c 'import json,sys; print(json.load(sys.stdin)["choices"][0]["message"]["content"].strip())' <<< "$response")
+            test -n "$output"
+            elapsed=$(( $(python3 -c 'import time; print(int(time.time()*1000))') - started ))
+            python3 -c 'import json,sys; print(json.dumps({"acceleration":sys.argv[1],"elapsed_ms":int(sys.argv[2]),"output":sys.argv[3]}))' "$mode" "$elapsed" "$output" >> ff-a1-macos-evidence.jsonl
+            cleanup
+            trap - EXIT
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ff-a1-macos-evidence
+          path: ff-a1-macos-evidence.jsonl

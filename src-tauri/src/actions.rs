@@ -140,7 +140,22 @@ fn should_use_streaming_overlay(style: OverlayStyle, is_streaming: bool) -> bool
     style == OverlayStyle::Live && is_streaming
 }
 
-async fn post_process_transcription(settings: &AppSettings, transcription: &str) -> Option<String> {
+fn accepted_local_transform_output(result: anyhow::Result<String>) -> Option<String> {
+    match result {
+        Ok(output) if !output.trim().is_empty() => Some(output),
+        Ok(_) => None,
+        Err(error) => {
+            error!("Local transform failed; preserving raw transcript: {error}");
+            None
+        }
+    }
+}
+
+async fn post_process_transcription(
+    app: &AppHandle,
+    settings: &AppSettings,
+    transcription: &str,
+) -> Option<String> {
     if is_blank_transcription(transcription) {
         debug!("Post-processing skipped because the transcription is empty");
         return None;
@@ -194,6 +209,13 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
     if prompt.trim().is_empty() {
         debug!("Post-processing skipped because the selected prompt is empty");
         return None;
+    }
+
+    if provider.id == crate::local_transform::LOCAL_TRANSFORM_PROVIDER_ID {
+        let system_prompt = build_system_prompt(&prompt);
+        return accepted_local_transform_output(
+            crate::local_transform::transform(app, settings, &system_prompt, transcription).await,
+        );
     }
 
     debug!(
@@ -479,7 +501,8 @@ pub(crate) async fn process_transcription_output(
     }
 
     if post_process {
-        if let Some(processed_text) = post_process_transcription(&settings, &final_text).await {
+        if let Some(processed_text) = post_process_transcription(app, &settings, &final_text).await
+        {
             post_processed_text = Some(processed_text.clone());
             final_text = processed_text;
 
@@ -1185,8 +1208,8 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
 #[cfg(test)]
 mod tests {
     use super::{
-        complete_unless_cancelled, has_deliverable_output, is_blank_transcription,
-        should_use_streaming_overlay, ProcessedTranscription,
+        accepted_local_transform_output, complete_unless_cancelled, has_deliverable_output,
+        is_blank_transcription, should_use_streaming_overlay, ProcessedTranscription,
     };
     use crate::settings::OverlayStyle;
     use std::future;
@@ -1259,5 +1282,16 @@ mod tests {
         assert!(!should_use_streaming_overlay(OverlayStyle::Live, false));
         assert!(!should_use_streaming_overlay(OverlayStyle::Minimal, true));
         assert!(!should_use_streaming_overlay(OverlayStyle::None, true));
+    }
+
+    #[test]
+    fn local_transform_failures_leave_raw_transcript_authoritative() {
+        for failure in ["cancelled", "corrupt model", "timeout", "memory pressure"] {
+            assert!(accepted_local_transform_output(Err(anyhow::anyhow!(failure))).is_none());
+        }
+        assert_eq!(
+            accepted_local_transform_output(Ok("Clean text.".to_string())).as_deref(),
+            Some("Clean text.")
+        );
     }
 }

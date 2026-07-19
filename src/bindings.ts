@@ -377,6 +377,69 @@ export const commands = {
   async getContextDiagnostics(): Promise<ContextDiagnostics> {
     return await TAURI_INVOKE("get_context_diagnostics");
   },
+  async getLocalTransformInstallPlan(): Promise<
+    Result<LocalTransformInstallPlan, string>
+  > {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("get_local_transform_install_plan"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async getLocalTransformStatus(): Promise<
+    Result<LocalTransformStatus, string>
+  > {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("get_local_transform_status"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async installLocalTransform(
+    acceptedManifestDigest: string,
+  ): Promise<Result<LocalTransformStatus, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("install_local_transform", {
+          acceptedManifestDigest,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async cancelLocalTransformInstall(): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("cancel_local_transform_install"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async deleteLocalTransformInstall(): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("delete_local_transform_install"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async changePostProcessEnabledSetting(
     enabled: boolean,
   ): Promise<Result<null, string>> {
@@ -535,6 +598,37 @@ export const commands = {
       return {
         status: "ok",
         data: await TAURI_INVOKE("set_post_process_selected_prompt", { id }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async changeLocalTransformAccelerationSetting(
+    acceleration: TransformAcceleration,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE(
+          "change_local_transform_acceleration_setting",
+          { acceleration },
+        ),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async changeLocalTransformTimeoutSetting(
+    timeoutSeconds: number,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("change_local_transform_timeout_setting", {
+          timeoutSeconds,
+        }),
       };
     } catch (e) {
       if (e instanceof Error) throw e;
@@ -1691,6 +1785,8 @@ export type AppSettings = {
   post_process_models?: Partial<{ [key in string]: string }>;
   post_process_prompts?: LLMPrompt[];
   post_process_selected_prompt_id?: string | null;
+  local_transform_acceleration?: TransformAcceleration;
+  local_transform_timeout_seconds?: number;
   mute_while_recording?: boolean;
   append_trailing_space?: boolean;
   app_language?: string;
@@ -1830,6 +1926,23 @@ export type ImplementationChangeResult = {
 };
 export type KeyboardImplementation = "tauri" | "handy_keys";
 export type LLMPrompt = { id: string; name: string; prompt: string };
+export type LocalTransformInstallPlan = {
+  runtime: RuntimeInstallPlan;
+  model: ModelInstallPlan;
+  total_download_bytes: number;
+  manifest_digest: string;
+  recommendation: TransformResourceRecommendation;
+};
+export type LocalTransformStatus = {
+  installed: boolean;
+  runtime_verified: boolean;
+  model_verified: boolean;
+  installing: boolean;
+  provider_id: string;
+  model_id: string;
+  runtime_release: string;
+  recommendation: TransformResourceRecommendation;
+};
 export type LogLevel = "trace" | "debug" | "info" | "warn" | "error";
 export type MicrophoneDiagnosticStatus =
   | "ready"
@@ -2000,6 +2113,18 @@ export type RecordingRetentionPeriod =
   | "days_3"
   | "weeks_2"
   | "months_3";
+export type RuntimeInstallPlan = {
+  release: string;
+  revision: string;
+  platform: string;
+  filename: string;
+  source_url: string;
+  size_bytes: number;
+  sha256: string;
+  destination: string;
+  licenses: ModelLicenseDisclosure[];
+  manifest_digest: string;
+};
 export type SecretMap = Partial<{ [key in string]: string }>;
 export type ShortcutBinding = {
   id: string;
@@ -2070,6 +2195,15 @@ export type TranscriptionProgressStage =
   | "post_processing"
   | "completed"
   | "failed";
+export type TransformAcceleration = "auto" | "cpu" | "gpu";
+export type TransformResourceRecommendation = {
+  logical_cpus: number;
+  total_memory_bytes: number | null;
+  estimated_peak_memory_bytes: number;
+  recommended: boolean;
+  available_accelerators: string[];
+  message: string;
+};
 export type TypingTool =
   | "auto"
   | "wtype"

@@ -56,6 +56,30 @@ pub struct CliArgs {
     )]
     pub install_model_file: Option<PathBuf>,
 
+    /// Print the immutable local transform runtime/model install plan and exit.
+    #[arg(long)]
+    pub local_transform_plan: bool,
+
+    /// Download and install the pinned local transform runtime and model.
+    #[arg(long, requires = "accept_local_transform_manifest_digest")]
+    pub install_local_transform: bool,
+
+    /// Exact digest of the reviewed local transform runtime/model manifest.
+    #[arg(long, value_name = "SHA256")]
+    pub accept_local_transform_manifest_digest: Option<String>,
+
+    /// Run the installed local transform against this text and exit.
+    #[arg(long, value_name = "TEXT")]
+    pub verify_local_transform: Option<String>,
+
+    /// Acceleration for --verify-local-transform: auto, cpu, or gpu.
+    #[arg(long, value_name = "MODE", requires = "verify_local_transform")]
+    pub transform_acceleration: Option<String>,
+
+    /// Timeout for --verify-local-transform, from 1 to 120 seconds.
+    #[arg(long, value_name = "SECONDS", requires = "verify_local_transform")]
+    pub transform_timeout_seconds: Option<u64>,
+
     /// Exact digest of the approved model manifest whose source, hash, size,
     /// licenses, and destination were reviewed before --install-model-file.
     #[arg(long, value_name = "SHA256")]
@@ -133,6 +157,18 @@ mod tests {
             "corpus.json",
             "--require-network-denied",
             "1.1.1.1:443"
+        ])
+        .is_ok());
+    }
+
+    #[test]
+    fn local_transform_install_requires_exact_manifest_acceptance() {
+        assert!(CliArgs::try_parse_from(["freeflow", "--install-local-transform"]).is_err());
+        assert!(CliArgs::try_parse_from([
+            "freeflow",
+            "--install-local-transform",
+            "--accept-local-transform-manifest-digest",
+            "digest"
         ])
         .is_ok());
     }

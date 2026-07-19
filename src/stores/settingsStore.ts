@@ -7,6 +7,7 @@ import type {
   AppContextProfile,
   TranscribeAcceleratorSetting,
   OrtAcceleratorSetting,
+  TransformAcceleration,
 } from "@/bindings";
 import { commands } from "@/bindings";
 
@@ -146,6 +147,12 @@ const settingUpdaters: {
     commands.changePostProcessEnabledSetting(value as boolean),
   post_process_selected_prompt_id: (value) =>
     commands.setPostProcessSelectedPrompt(value as string),
+  local_transform_acceleration: (value) =>
+    commands.changeLocalTransformAccelerationSetting(
+      value as TransformAcceleration,
+    ),
+  local_transform_timeout_seconds: (value) =>
+    commands.changeLocalTransformTimeoutSetting(value as number),
   mute_while_recording: (value) =>
     commands.changeMuteWhileRecordingSetting(value as boolean),
   append_trailing_space: (value) =>

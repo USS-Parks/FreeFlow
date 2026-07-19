@@ -520,6 +520,23 @@
       }
     },
     "postProcessing": {
+      "localRuntime": {
+        "groupTitle": "Local transform runtime",
+        "title": "Verified local runtime",
+        "description": "Optional on-device text cleanup using pinned llama.cpp and model artifacts. Nothing downloads until you review and accept this manifest.",
+        "package": "Runtime and model download: {{size}}",
+        "installed": "The runtime and model are installed and integrity-verified.",
+        "notInstalled": "The optional transform runtime is not installed. Raw transcription remains available.",
+        "consent": "I reviewed the sources, exact sizes, SHA-256 hashes, licenses, and managed destinations shown above and approve this download.",
+        "install": "Install locally",
+        "cancel": "Cancel download",
+        "remove": "Delete local runtime",
+        "progress": "{{phase}}: {{downloaded}} of {{total}}",
+        "acceleration": "Acceleration",
+        "auto": "Automatic",
+        "gpu": "GPU acceleration",
+        "timeout": "Timeout (seconds)"
+      },
       "hotkey": {
         "title": "Phím tắt"
       },

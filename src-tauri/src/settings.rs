@@ -11,6 +11,8 @@ use crate::storage::settings_file::AtomicSettingsFile;
 
 pub const APPLE_INTELLIGENCE_PROVIDER_ID: &str = "apple_intelligence";
 pub const APPLE_INTELLIGENCE_DEFAULT_MODEL_ID: &str = "Apple Intelligence";
+pub const LOCAL_TRANSFORM_PROVIDER_ID: &str = "local_llama";
+pub const LOCAL_TRANSFORM_MODEL_ID: &str = "smollm2-135m-instruct-q4-k-m";
 
 #[derive(Serialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "lowercase")]
@@ -95,7 +97,7 @@ pub struct LLMPrompt {
     pub prompt: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Type)]
 pub struct PostProcessProvider {
     pub id: String,
     pub label: String,
@@ -106,6 +108,15 @@ pub struct PostProcessProvider {
     pub models_endpoint: Option<String>,
     #[serde(default)]
     pub supports_structured_output: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum TransformAcceleration {
+    #[default]
+    Auto,
+    Cpu,
+    Gpu,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
@@ -491,6 +502,10 @@ pub struct AppSettings {
     #[serde(default)]
     pub post_process_selected_prompt_id: Option<String>,
     #[serde(default)]
+    pub local_transform_acceleration: TransformAcceleration,
+    #[serde(default = "default_local_transform_timeout_seconds")]
+    pub local_transform_timeout_seconds: u64,
+    #[serde(default)]
     pub mute_while_recording: bool,
     #[serde(default)]
     pub append_trailing_space: bool,
@@ -537,7 +552,7 @@ fn default_model() -> String {
     "".to_string()
 }
 
-const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 3;
+const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 4;
 
 fn default_settings_schema_version() -> u32 {
     CURRENT_SETTINGS_SCHEMA_VERSION
@@ -701,98 +716,18 @@ fn default_show_tray_icon() -> bool {
 }
 
 fn default_post_process_provider_id() -> String {
-    "openai".to_string()
+    LOCAL_TRANSFORM_PROVIDER_ID.to_string()
 }
 
 fn default_post_process_providers() -> Vec<PostProcessProvider> {
-    let mut providers = vec![
-        PostProcessProvider {
-            id: "openai".to_string(),
-            label: "OpenAI".to_string(),
-            base_url: "https://api.openai.com/v1".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-            supports_structured_output: true,
-        },
-        PostProcessProvider {
-            id: "zai".to_string(),
-            label: "Z.AI".to_string(),
-            base_url: "https://api.z.ai/api/paas/v4".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-            supports_structured_output: true,
-        },
-        PostProcessProvider {
-            id: "openrouter".to_string(),
-            label: "OpenRouter".to_string(),
-            base_url: "https://openrouter.ai/api/v1".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-            supports_structured_output: true,
-        },
-        PostProcessProvider {
-            id: "anthropic".to_string(),
-            label: "Anthropic".to_string(),
-            base_url: "https://api.anthropic.com/v1".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-            supports_structured_output: false,
-        },
-        PostProcessProvider {
-            id: "groq".to_string(),
-            label: "Groq".to_string(),
-            base_url: "https://api.groq.com/openai/v1".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-            supports_structured_output: false,
-        },
-        PostProcessProvider {
-            id: "cerebras".to_string(),
-            label: "Cerebras".to_string(),
-            base_url: "https://api.cerebras.ai/v1".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: Some("/models".to_string()),
-            supports_structured_output: true,
-        },
-    ];
-
-    // Note: We always include Apple Intelligence on macOS ARM64 without checking availability
-    // at startup. The availability check is deferred to when the user actually tries to use it
-    // (in actions.rs). This prevents crashes on macOS 26.x beta where accessing
-    // SystemLanguageModel.default during early app initialization causes SIGABRT.
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    {
-        providers.push(PostProcessProvider {
-            id: APPLE_INTELLIGENCE_PROVIDER_ID.to_string(),
-            label: "Apple Intelligence".to_string(),
-            base_url: "apple-intelligence://local".to_string(),
-            allow_base_url_edit: false,
-            models_endpoint: None,
-            supports_structured_output: true,
-        });
-    }
-
-    // AWS Bedrock via Mantle (OpenAI-compatible endpoint)
-    providers.push(PostProcessProvider {
-        id: "bedrock_mantle".to_string(),
-        label: "AWS Bedrock (Mantle)".to_string(),
-        base_url: "https://bedrock-mantle.us-east-1.api.aws/v1".to_string(),
+    vec![PostProcessProvider {
+        id: LOCAL_TRANSFORM_PROVIDER_ID.to_string(),
+        label: "Local llama.cpp".to_string(),
+        base_url: "local://llama.cpp/b10068".to_string(),
         allow_base_url_edit: false,
-        models_endpoint: Some("/models".to_string()),
+        models_endpoint: None,
         supports_structured_output: true,
-    });
-
-    // Custom provider always comes last
-    providers.push(PostProcessProvider {
-        id: "custom".to_string(),
-        label: "Custom".to_string(),
-        base_url: "http://localhost:11434/v1".to_string(),
-        allow_base_url_edit: true,
-        models_endpoint: Some("/models".to_string()),
-        supports_structured_output: false,
-    });
-
-    providers
+    }]
 }
 
 fn default_post_process_api_keys() -> SecretMap {
@@ -804,10 +739,17 @@ fn default_post_process_api_keys() -> SecretMap {
 }
 
 fn default_model_for_provider(provider_id: &str) -> String {
+    if provider_id == LOCAL_TRANSFORM_PROVIDER_ID {
+        return LOCAL_TRANSFORM_MODEL_ID.to_string();
+    }
     if provider_id == APPLE_INTELLIGENCE_PROVIDER_ID {
         return APPLE_INTELLIGENCE_DEFAULT_MODEL_ID.to_string();
     }
     String::new()
+}
+
+fn default_local_transform_timeout_seconds() -> u64 {
+    30
 }
 
 fn default_post_process_models() -> HashMap<String, String> {
@@ -1003,6 +945,8 @@ pub fn get_default_settings() -> AppSettings {
         post_process_models: default_post_process_models(),
         post_process_prompts: default_post_process_prompts(),
         post_process_selected_prompt_id: None,
+        local_transform_acceleration: TransformAcceleration::default(),
+        local_transform_timeout_seconds: default_local_transform_timeout_seconds(),
         mute_while_recording: false,
         append_trailing_space: false,
         app_language: default_app_language(),
@@ -1239,6 +1183,19 @@ fn apply_settings_migrations(
         settings.app_context_enabled = false;
         settings.app_context_denylist.clear();
         settings.app_context_profiles = default_app_context_profiles();
+        updated = true;
+    }
+
+    if settings_value.get("local_transform_acceleration").is_none()
+        || settings.post_process_provider_id != LOCAL_TRANSFORM_PROVIDER_ID
+        || settings.post_process_providers != default_post_process_providers()
+    {
+        settings.post_process_provider_id = LOCAL_TRANSFORM_PROVIDER_ID.to_string();
+        settings.post_process_providers = default_post_process_providers();
+        settings.post_process_api_keys = default_post_process_api_keys();
+        settings.post_process_models = default_post_process_models();
+        settings.local_transform_acceleration = TransformAcceleration::Auto;
+        settings.local_transform_timeout_seconds = default_local_transform_timeout_seconds();
         updated = true;
     }
 
@@ -1723,6 +1680,8 @@ mod tests {
             "overlay_style": "live",
             "auto_submit_confirmed": false,
             "app_context_enabled": false,
+            "local_transform_acceleration": "auto",
+            "local_transform_timeout_seconds": 30,
             "transcribe_accelerator": "gpu",
             "transcribe_gpu_device": 2
         });

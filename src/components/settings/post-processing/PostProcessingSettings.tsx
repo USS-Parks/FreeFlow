@@ -1,7 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Trans, useTranslation } from "react-i18next";
-import { RefreshCcw } from "lucide-react";
-import { commands } from "@/bindings";
+import { listen } from "@tauri-apps/api/event";
+import {
+  commands,
+  type LocalTransformInstallPlan,
+  type LocalTransformStatus,
+  type TransformAcceleration,
+} from "@/bindings";
 
 import { Alert } from "../../ui/Alert";
 import {
@@ -11,134 +16,236 @@ import {
   Textarea,
 } from "@/components/ui";
 import { Button } from "../../ui/Button";
-import { ResetButton } from "../../ui/ResetButton";
 import { Input } from "../../ui/Input";
 
-import { ProviderSelect } from "../PostProcessingSettingsApi/ProviderSelect";
-import { BaseUrlField } from "../PostProcessingSettingsApi/BaseUrlField";
-import { ApiKeyField } from "../PostProcessingSettingsApi/ApiKeyField";
-import { ModelSelect } from "../PostProcessingSettingsApi/ModelSelect";
-import { usePostProcessProviderState } from "../PostProcessingSettingsApi/usePostProcessProviderState";
 import { ShortcutInput } from "../ShortcutInput";
 import { useSettings } from "../../../hooks/useSettings";
 
 const PostProcessingSettingsApiComponent: React.FC = () => {
   const { t } = useTranslation();
-  const state = usePostProcessProviderState();
+  const { getSetting, updateSetting, isUpdating } = useSettings();
+  const [plan, setPlan] = useState<LocalTransformInstallPlan | null>(null);
+  const [status, setStatus] = useState<LocalTransformStatus | null>(null);
+  const [accepted, setAccepted] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [progress, setProgress] = useState({
+    phase: "",
+    downloaded: 0,
+    total: 0,
+  });
+
+  const refresh = async () => {
+    const [planResult, statusResult] = await Promise.all([
+      commands.getLocalTransformInstallPlan(),
+      commands.getLocalTransformStatus(),
+    ]);
+    if (planResult.status === "ok") setPlan(planResult.data);
+    if (statusResult.status === "ok") setStatus(statusResult.data);
+  };
+
+  useEffect(() => {
+    void refresh();
+    const unlisten = listen<{
+      phase: string;
+      downloaded_bytes: number;
+      total_bytes: number;
+    }>("local-transform-install-progress", ({ payload }) => {
+      setProgress({
+        phase: payload.phase,
+        downloaded: payload.downloaded_bytes,
+        total: payload.total_bytes,
+      });
+    });
+    return () => {
+      void unlisten.then((dispose) => dispose());
+    };
+  }, []);
+
+  const install = async () => {
+    if (!accepted || !plan) return;
+    setBusy(true);
+    setError("");
+    const result = await commands.installLocalTransform(plan.manifest_digest);
+    if (result.status === "ok") {
+      setStatus(result.data);
+      setAccepted(false);
+    } else {
+      setError(result.error);
+    }
+    setBusy(false);
+    await refresh();
+  };
+
+  const cancel = async () => {
+    await commands.cancelLocalTransformInstall();
+    setBusy(false);
+    await refresh();
+  };
+
+  const remove = async () => {
+    const result = await commands.deleteLocalTransformInstall();
+    if (result.status === "error") setError(result.error);
+    await refresh();
+  };
+
+  const formatBytes = (bytes: number) =>
+    `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  const acceleration =
+    (getSetting("local_transform_acceleration") as TransformAcceleration) ||
+    "auto";
+  const timeout = getSetting("local_transform_timeout_seconds") || 30;
 
   return (
     <>
       <SettingContainer
-        title={t("settings.postProcessing.api.provider.title")}
-        description={t("settings.postProcessing.api.provider.description")}
-        descriptionMode="tooltip"
+        title={t("settings.postProcessing.localRuntime.title")}
+        description={t("settings.postProcessing.localRuntime.description")}
+        layout="stacked"
+        grouped={true}
+      >
+        <div className="space-y-3 text-sm">
+          {plan && (
+            <div className="space-y-1 rounded-md border border-mid-gray/20 p-3">
+              <p className="font-semibold">
+                {t("settings.postProcessing.localRuntime.package", {
+                  size: formatBytes(plan.total_download_bytes),
+                })}
+              </p>
+              {[plan.runtime, plan.model].map((artifact) => (
+                <div
+                  key={artifact.filename}
+                  className="space-y-1 border-t border-mid-gray/20 pt-2"
+                >
+                  <p className="font-semibold">{artifact.filename}</p>
+                  <p>{artifact.size_bytes.toLocaleString()}</p>
+                  <p className="break-all text-xs text-mid-gray">
+                    {artifact.source_url}
+                  </p>
+                  <p className="break-all text-xs text-mid-gray">
+                    {artifact.destination}
+                  </p>
+                  <p className="break-all text-xs text-mid-gray">
+                    {artifact.sha256}
+                  </p>
+                  {artifact.licenses.map((license) => (
+                    <div
+                      key={`${artifact.filename}-${license.scope}`}
+                      className="text-xs text-mid-gray"
+                    >
+                      <p>
+                        {license.name} ({license.identifier})
+                      </p>
+                      <p>{license.attribution}</p>
+                      <p className="break-all">{license.url}</p>
+                    </div>
+                  ))}
+                </div>
+              ))}
+              <p className="text-xs">{plan.recommendation.message}</p>
+            </div>
+          )}
+          <p>
+            {status?.installed
+              ? t("settings.postProcessing.localRuntime.installed")
+              : t("settings.postProcessing.localRuntime.notInstalled")}
+          </p>
+          {(busy || status?.installing) && progress.total > 0 && (
+            <p>
+              {t("settings.postProcessing.localRuntime.progress", {
+                phase: progress.phase,
+                downloaded: formatBytes(progress.downloaded),
+                total: formatBytes(progress.total),
+              })}
+            </p>
+          )}
+          {!status?.installed && (
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(event) => setAccepted(event.target.checked)}
+              />
+              <span>{t("settings.postProcessing.localRuntime.consent")}</span>
+            </label>
+          )}
+          <div className="flex gap-2">
+            {!status?.installed && !busy && !status?.installing && (
+              <Button
+                onClick={install}
+                variant="primary"
+                size="md"
+                disabled={!accepted || !plan}
+              >
+                {t("settings.postProcessing.localRuntime.install")}
+              </Button>
+            )}
+            {(busy || status?.installing) && (
+              <Button onClick={cancel} variant="secondary" size="md">
+                {t("settings.postProcessing.localRuntime.cancel")}
+              </Button>
+            )}
+            {status?.installed && (
+              <Button onClick={remove} variant="secondary" size="md">
+                {t("settings.postProcessing.localRuntime.remove")}
+              </Button>
+            )}
+          </div>
+          {error && (
+            <Alert variant="error" contained>
+              {error}
+            </Alert>
+          )}
+        </div>
+      </SettingContainer>
+      <SettingContainer
+        title={t("settings.postProcessing.localRuntime.acceleration")}
+        description={t("settings.postProcessing.localRuntime.description")}
         layout="horizontal"
         grouped={true}
       >
-        <div className="flex items-center gap-2">
-          <ProviderSelect
-            options={state.providerOptions}
-            value={state.selectedProviderId}
-            onChange={state.handleProviderSelect}
-          />
-        </div>
-      </SettingContainer>
-
-      {state.isAppleProvider ? (
-        state.appleIntelligenceUnavailable ? (
-          <Alert variant="error" contained>
-            {t("settings.postProcessing.api.appleIntelligence.unavailable")}
-          </Alert>
-        ) : null
-      ) : (
-        <>
-          {state.selectedProvider?.id === "custom" && (
-            <SettingContainer
-              title={t("settings.postProcessing.api.baseUrl.title")}
-              description={t("settings.postProcessing.api.baseUrl.description")}
-              descriptionMode="tooltip"
-              layout="horizontal"
-              grouped={true}
-            >
-              <div className="flex items-center gap-2">
-                <BaseUrlField
-                  value={state.baseUrl}
-                  onBlur={state.handleBaseUrlChange}
-                  placeholder={t(
-                    "settings.postProcessing.api.baseUrl.placeholder",
-                  )}
-                  disabled={state.isBaseUrlUpdating}
-                  className="min-w-[380px]"
-                />
-              </div>
-            </SettingContainer>
-          )}
-
-          <SettingContainer
-            title={t("settings.postProcessing.api.apiKey.title")}
-            description={t("settings.postProcessing.api.apiKey.description")}
-            descriptionMode="tooltip"
-            layout="horizontal"
-            grouped={true}
-          >
-            <div className="flex items-center gap-2">
-              <ApiKeyField
-                value={state.apiKey}
-                onBlur={state.handleApiKeyChange}
-                placeholder={t(
-                  "settings.postProcessing.api.apiKey.placeholder",
-                )}
-                disabled={state.isApiKeyUpdating}
-                className="min-w-[320px]"
-              />
-            </div>
-          </SettingContainer>
-        </>
-      )}
-
-      {!state.isAppleProvider && (
-        <SettingContainer
-          title={t("settings.postProcessing.api.model.title")}
-          description={
-            state.isCustomProvider
-              ? t("settings.postProcessing.api.model.descriptionCustom")
-              : t("settings.postProcessing.api.model.descriptionDefault")
+        <Dropdown
+          options={[
+            {
+              value: "auto",
+              label: t("settings.postProcessing.localRuntime.auto"),
+            },
+            { value: "cpu", label: "CPU" },
+            {
+              value: "gpu",
+              label: t("settings.postProcessing.localRuntime.gpu"),
+            },
+          ]}
+          selectedValue={acceleration}
+          onSelect={(value) =>
+            updateSetting(
+              "local_transform_acceleration",
+              value as TransformAcceleration,
+            )
           }
-          descriptionMode="tooltip"
-          layout="stacked"
-          grouped={true}
-        >
-          <div className="flex items-center gap-2">
-            <ModelSelect
-              value={state.model}
-              options={state.modelOptions}
-              disabled={state.isModelUpdating}
-              isLoading={state.isFetchingModels}
-              placeholder={
-                state.modelOptions.length > 0
-                  ? t(
-                      "settings.postProcessing.api.model.placeholderWithOptions",
-                    )
-                  : t("settings.postProcessing.api.model.placeholderNoOptions")
-              }
-              onSelect={state.handleModelSelect}
-              onCreate={state.handleModelCreate}
-              onBlur={() => {}}
-              className="flex-1 min-w-[380px]"
-            />
-            <ResetButton
-              onClick={state.handleRefreshModels}
-              disabled={state.isFetchingModels}
-              ariaLabel={t("settings.postProcessing.api.model.refreshModels")}
-              className="flex h-10 w-10 items-center justify-center"
-            >
-              <RefreshCcw
-                className={`h-4 w-4 ${state.isFetchingModels ? "animate-spin" : ""}`}
-              />
-            </ResetButton>
-          </div>
-        </SettingContainer>
-      )}
+          disabled={isUpdating("local_transform_acceleration")}
+        />
+      </SettingContainer>
+      <SettingContainer
+        title={t("settings.postProcessing.localRuntime.timeout")}
+        description={t("settings.postProcessing.localRuntime.description")}
+        layout="horizontal"
+        grouped={true}
+      >
+        <Input
+          type="number"
+          min={5}
+          max={120}
+          value={timeout}
+          onChange={(event) => {
+            const value = Number(event.target.value);
+            if (value >= 5 && value <= 120)
+              void updateSetting("local_transform_timeout_seconds", value);
+          }}
+          disabled={isUpdating("local_transform_timeout_seconds")}
+          className="w-24"
+        />
+      </SettingContainer>
     </>
   );
 };
@@ -437,7 +544,9 @@ export const PostProcessingSettings: React.FC = () => {
         />
       </SettingsGroup>
 
-      <SettingsGroup title={t("settings.postProcessing.api.title")}>
+      <SettingsGroup
+        title={t("settings.postProcessing.localRuntime.groupTitle")}
+      >
         <PostProcessingSettingsApi />
       </SettingsGroup>
 

@@ -17,6 +17,13 @@ replace them without changing verified behavior.
 | `tauri-nspanel 2.1.0` | `ahkohd/tauri-nspanel`, branch `v2.1`           | `da9c9a8d4eb7f0524a2508988df1a7d9585b4904` | LICENSE_MIT and LICENSE_APACHE-2.0 shipped; manifest metadata missing | Temporary macOS overlay dependency; explicit metadata exception                                   |
 | `vad-rs 0.1.6`        | `cjpais/vad-rs`                                 | `2a412ed858695b9251f3f5a1a20d95b59fa7c498` | MIT                                                                   | Retain engine seam; bundle the exact V4 fixture recorded in `NOTICE.md` and its resource manifest |
 
+## Released crates added after the foundation import
+
+| Package      | Source                              | Locked version | License           | Disposition                                                                                       |
+| ------------ | ----------------------------------- | -------------- | ----------------- | ------------------------------------------------------------------------------------------------- |
+| `zip`        | crates.io / `zip-rs/zip2`           | `8.6.0`        | MIT               | Extract only the exact hash-verified llama.cpp Windows archive; unsafe archive paths are rejected |
+| `typed-path` | crates.io / `chipbuster/typed-path` | `0.12.3`       | MIT OR Apache-2.0 | Transitive path-safety dependency of `zip`                                                        |
+
 ## RustSec disposition
 
 FF-G3 updates `rustls-webpki` to `0.103.13`, `tar` to `0.4.45`, `plist` to

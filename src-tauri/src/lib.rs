@@ -12,6 +12,7 @@ pub mod contracts;
 mod helpers;
 mod input;
 mod llm_client;
+mod local_transform;
 mod managers;
 mod model_install;
 mod overlay;
@@ -359,6 +360,90 @@ fn show_main_window_command(app: AppHandle) -> Result<(), String> {
 /// failure, 2 bad input/usage).
 fn run_headless_transcription(app: &AppHandle, args: &CliArgs) -> i32 {
     use std::time::Instant;
+
+    if args.local_transform_plan {
+        match local_transform::get_install_plan(app) {
+            Ok(plan) => match serde_json::to_string_pretty(&plan) {
+                Ok(json) => println!("{json}"),
+                Err(error) => {
+                    eprintln!("error: serialize local transform plan: {error}");
+                    return 1;
+                }
+            },
+            Err(error) => {
+                eprintln!("error: local transform plan failed: {error:#}");
+                return 1;
+            }
+        }
+        return 0;
+    }
+
+    if args.install_local_transform {
+        let accepted = args
+            .accept_local_transform_manifest_digest
+            .as_deref()
+            .expect("clap requires local transform manifest acceptance");
+        return match tauri::async_runtime::block_on(local_transform::install(app, accepted)) {
+            Ok(status) => {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&status).unwrap_or_else(|_| "{}".to_string())
+                );
+                0
+            }
+            Err(error) => {
+                eprintln!("error: local transform install failed: {error:#}");
+                1
+            }
+        };
+    }
+
+    if let Some(input) = args.verify_local_transform.as_deref() {
+        let mut settings = settings::get_settings(app);
+        settings.local_transform_acceleration =
+            match args.transform_acceleration.as_deref().unwrap_or("auto") {
+                "auto" => settings::TransformAcceleration::Auto,
+                "cpu" => settings::TransformAcceleration::Cpu,
+                "gpu" => settings::TransformAcceleration::Gpu,
+                other => {
+                    eprintln!("error: invalid transform acceleration '{other}'");
+                    return 2;
+                }
+            };
+        if let Some(timeout) = args.transform_timeout_seconds {
+            if !(1..=120).contains(&timeout) {
+                eprintln!("error: transform timeout must be between 1 and 120 seconds");
+                return 2;
+            }
+            settings.local_transform_timeout_seconds = timeout;
+        }
+        let started = Instant::now();
+        let result = tauri::async_runtime::block_on(local_transform::transform(
+            app,
+            &settings,
+            "Clean punctuation and capitalization only. Return only the cleaned text.",
+            input,
+        ));
+        return match result {
+            Ok(output) => {
+                println!(
+                    "{}",
+                    serde_json::json!({
+                        "schema_version": 1,
+                        "acceleration": args.transform_acceleration.as_deref().unwrap_or("auto"),
+                        "elapsed_ms": started.elapsed().as_millis(),
+                        "input": input,
+                        "output": output,
+                    })
+                );
+                0
+            }
+            Err(error) => {
+                eprintln!("error: local transform verification failed: {error:#}");
+                1
+            }
+        };
+    }
 
     if let Some(source_path) = args.install_model_file.as_deref() {
         let model_id = args
@@ -942,6 +1027,11 @@ pub fn run(cli_args: CliArgs) {
             shortcut::change_app_context_denylist_setting,
             shortcut::change_app_context_profiles_setting,
             platform_context::get_context_diagnostics,
+            local_transform::get_local_transform_install_plan,
+            local_transform::get_local_transform_status,
+            local_transform::install_local_transform,
+            local_transform::cancel_local_transform_install,
+            local_transform::delete_local_transform_install,
             shortcut::change_post_process_enabled_setting,
             shortcut::change_experimental_enabled_setting,
             shortcut::change_post_process_base_url_setting,
@@ -953,6 +1043,8 @@ pub fn run(cli_args: CliArgs) {
             shortcut::update_post_process_prompt,
             shortcut::delete_post_process_prompt,
             shortcut::set_post_process_selected_prompt,
+            shortcut::change_local_transform_acceleration_setting,
+            shortcut::change_local_transform_timeout_setting,
             shortcut::update_custom_words,
             shortcut::suspend_binding,
             shortcut::resume_binding,
@@ -1070,6 +1162,9 @@ pub fn run(cli_args: CliArgs) {
     let headless_mode = cli_args.transcribe_file.is_some()
         || cli_args.evaluate_corpus.is_some()
         || cli_args.install_model_file.is_some()
+        || cli_args.local_transform_plan
+        || cli_args.install_local_transform
+        || cli_args.verify_local_transform.is_some()
         || cli_args.list_devices
         || cli_args.list_models
         || cli_args.verify_audio.is_some();

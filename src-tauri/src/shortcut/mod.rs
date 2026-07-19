@@ -23,8 +23,8 @@ use tauri_plugin_autostart::ManagerExt;
 use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
     self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
-    OverlayPosition, OverlayStyle, PasteMethod, ShortcutBinding, SoundTheme, Theme, TypingTool,
-    APPLE_INTELLIGENCE_PROVIDER_ID,
+    OverlayPosition, OverlayStyle, PasteMethod, ShortcutBinding, SoundTheme, Theme,
+    TransformAcceleration, TypingTool, APPLE_INTELLIGENCE_PROVIDER_ID, LOCAL_TRANSFORM_PROVIDER_ID,
 };
 use crate::tray;
 
@@ -1017,6 +1017,33 @@ pub fn change_post_process_enabled_setting(app: AppHandle, enabled: bool) -> Res
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_local_transform_acceleration_setting(
+    app: AppHandle,
+    acceleration: TransformAcceleration,
+) -> Result<(), String> {
+    let mut settings = get_settings(&app);
+    settings.local_transform_acceleration = acceleration;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_local_transform_timeout_setting(
+    app: AppHandle,
+    timeout_seconds: u64,
+) -> Result<(), String> {
+    if !(5..=120).contains(&timeout_seconds) {
+        return Err("Local transform timeout must be between 5 and 120 seconds".to_string());
+    }
+    let mut settings = get_settings(&app);
+    settings.local_transform_timeout_seconds = timeout_seconds;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn change_experimental_enabled_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     settings.experimental_enabled = enabled;
@@ -1099,6 +1126,9 @@ pub fn change_post_process_model_setting(
 #[tauri::command]
 #[specta::specta]
 pub fn set_post_process_provider(app: AppHandle, provider_id: String) -> Result<(), String> {
+    if provider_id != LOCAL_TRANSFORM_PROVIDER_ID {
+        return Err("FreeFlow supports only the verified local transform provider".to_string());
+    }
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
     settings.post_process_provider_id = provider_id;
