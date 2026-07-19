@@ -119,6 +119,27 @@ pub enum TransformAcceleration {
     Gpu,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CleanupLevel {
+    None,
+    Light,
+    #[default]
+    Medium,
+    High,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FreeFlowStyle {
+    #[default]
+    Natural,
+    Concise,
+    Warm,
+    Professional,
+    Literal,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "lowercase")]
 pub enum OverlayPosition {
@@ -211,6 +232,8 @@ pub enum AppBoundaryStyle {
 pub struct AppContextProfile {
     pub category: AppCategory,
     pub boundary_style: AppBoundaryStyle,
+    #[serde(default)]
+    pub freeflow_style: FreeFlowStyle,
     pub surrounding_text_enabled: bool,
     pub append_trailing_space: bool,
 }
@@ -502,6 +525,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub post_process_selected_prompt_id: Option<String>,
     #[serde(default)]
+    pub cleanup_level: CleanupLevel,
+    #[serde(default)]
     pub local_transform_acceleration: TransformAcceleration,
     #[serde(default = "default_local_transform_timeout_seconds")]
     pub local_transform_timeout_seconds: u64,
@@ -552,7 +577,7 @@ fn default_model() -> String {
     "".to_string()
 }
 
-const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 4;
+const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 5;
 
 fn default_settings_schema_version() -> u32 {
     CURRENT_SETTINGS_SCHEMA_VERSION
@@ -561,41 +586,48 @@ fn default_settings_schema_version() -> u32 {
 pub fn default_app_context_profiles() -> Vec<AppContextProfile> {
     use AppBoundaryStyle::{Compact, Literal, Standard};
     use AppCategory::{Code, Document, Email, Messaging, Other, Terminal};
+    use FreeFlowStyle::{Concise, Literal as LiteralStyle, Natural, Professional, Warm};
 
     vec![
         AppContextProfile {
             category: Email,
             boundary_style: Standard,
+            freeflow_style: Professional,
             surrounding_text_enabled: true,
             append_trailing_space: false,
         },
         AppContextProfile {
             category: Messaging,
             boundary_style: Compact,
+            freeflow_style: Warm,
             surrounding_text_enabled: true,
             append_trailing_space: false,
         },
         AppContextProfile {
             category: Document,
             boundary_style: Standard,
+            freeflow_style: Natural,
             surrounding_text_enabled: true,
             append_trailing_space: false,
         },
         AppContextProfile {
             category: Code,
             boundary_style: Literal,
+            freeflow_style: LiteralStyle,
             surrounding_text_enabled: false,
             append_trailing_space: false,
         },
         AppContextProfile {
             category: Terminal,
             boundary_style: Literal,
+            freeflow_style: LiteralStyle,
             surrounding_text_enabled: false,
             append_trailing_space: false,
         },
         AppContextProfile {
             category: Other,
             boundary_style: Standard,
+            freeflow_style: Concise,
             surrounding_text_enabled: true,
             append_trailing_space: false,
         },
@@ -945,6 +977,7 @@ pub fn get_default_settings() -> AppSettings {
         post_process_models: default_post_process_models(),
         post_process_prompts: default_post_process_prompts(),
         post_process_selected_prompt_id: None,
+        cleanup_level: CleanupLevel::default(),
         local_transform_acceleration: TransformAcceleration::default(),
         local_transform_timeout_seconds: default_local_transform_timeout_seconds(),
         mute_while_recording: false,
@@ -1183,6 +1216,30 @@ fn apply_settings_migrations(
         settings.app_context_enabled = false;
         settings.app_context_denylist.clear();
         settings.app_context_profiles = default_app_context_profiles();
+        updated = true;
+    }
+
+    let missing_freeflow_styles = settings_value
+        .get("app_context_profiles")
+        .and_then(serde_json::Value::as_array)
+        .is_some_and(|profiles| {
+            profiles
+                .iter()
+                .any(|profile| profile.get("freeflow_style").is_none())
+        });
+    if missing_freeflow_styles {
+        for profile in &mut settings.app_context_profiles {
+            profile.freeflow_style = default_app_context_profiles()
+                .into_iter()
+                .find(|default| default.category == profile.category)
+                .map(|default| default.freeflow_style)
+                .unwrap_or_default();
+        }
+        updated = true;
+    }
+
+    if settings_value.get("cleanup_level").is_none() {
+        settings.cleanup_level = CleanupLevel::Medium;
         updated = true;
     }
 
@@ -1548,6 +1605,62 @@ mod tests {
     }
 
     #[test]
+    fn legacy_profiles_receive_original_per_category_styles() {
+        let mut settings = get_default_settings();
+        for profile in &mut settings.app_context_profiles {
+            profile.freeflow_style = FreeFlowStyle::Natural;
+        }
+        let profiles_without_styles = settings
+            .app_context_profiles
+            .iter()
+            .map(|profile| {
+                serde_json::json!({
+                    "category": profile.category,
+                    "boundary_style": profile.boundary_style,
+                    "surrounding_text_enabled": profile.surrounding_text_enabled,
+                    "append_trailing_space": profile.append_trailing_space,
+                })
+            })
+            .collect::<Vec<_>>();
+        let raw = serde_json::json!({
+            "settings_schema_version": 4,
+            "onboarding_completed": false,
+            "onboarding_stage": "welcome",
+            "whats_new_last_seen_version": "0.1.0",
+            "overlay_style": "live",
+            "auto_submit_confirmed": false,
+            "app_context_enabled": false,
+            "app_context_profiles": profiles_without_styles,
+            "local_transform_acceleration": "auto"
+        });
+
+        assert!(apply_settings_migrations(&mut settings, &raw));
+        assert_eq!(settings.cleanup_level, CleanupLevel::Medium);
+        assert_eq!(
+            settings
+                .app_context_profile(AppCategory::Email)
+                .freeflow_style,
+            FreeFlowStyle::Professional
+        );
+        assert_eq!(
+            settings
+                .app_context_profile(AppCategory::Messaging)
+                .freeflow_style,
+            FreeFlowStyle::Warm
+        );
+        assert_eq!(
+            settings
+                .app_context_profile(AppCategory::Code)
+                .freeflow_style,
+            FreeFlowStyle::Literal
+        );
+        assert_eq!(
+            settings.settings_schema_version,
+            CURRENT_SETTINGS_SCHEMA_VERSION
+        );
+    }
+
+    #[test]
     fn legacy_context_access_migrates_fail_closed() {
         let mut settings = get_default_settings();
         settings.app_context_enabled = true;
@@ -1680,6 +1793,8 @@ mod tests {
             "overlay_style": "live",
             "auto_submit_confirmed": false,
             "app_context_enabled": false,
+            "app_context_profiles": default_app_context_profiles(),
+            "cleanup_level": "medium",
             "local_transform_acceleration": "auto",
             "local_transform_timeout_seconds": 30,
             "transcribe_accelerator": "gpu",

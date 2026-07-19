@@ -8,6 +8,7 @@ import type {
   TranscribeAcceleratorSetting,
   OrtAcceleratorSetting,
   TransformAcceleration,
+  CleanupLevel,
 } from "@/bindings";
 import { commands } from "@/bindings";
 
@@ -147,6 +148,8 @@ const settingUpdaters: {
     commands.changePostProcessEnabledSetting(value as boolean),
   post_process_selected_prompt_id: (value) =>
     commands.setPostProcessSelectedPrompt(value as string),
+  cleanup_level: (value) =>
+    commands.changeCleanupLevelSetting(value as CleanupLevel),
   local_transform_acceleration: (value) =>
     commands.changeLocalTransformAccelerationSetting(
       value as TransformAcceleration,

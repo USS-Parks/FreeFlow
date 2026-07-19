@@ -6,6 +6,10 @@ import {
   type LocalTransformInstallPlan,
   type LocalTransformStatus,
   type TransformAcceleration,
+  type AppCategory,
+  type AppContextProfile,
+  type CleanupLevel,
+  type FreeFlowStyle,
 } from "@/bindings";
 
 import { Alert } from "../../ui/Alert";
@@ -20,6 +24,114 @@ import { Input } from "../../ui/Input";
 
 import { ShortcutInput } from "../ShortcutInput";
 import { useSettings } from "../../../hooks/useSettings";
+
+const appCategories: AppCategory[] = [
+  "email",
+  "messaging",
+  "document",
+  "code",
+  "terminal",
+  "other",
+];
+
+const freeFlowStyles: FreeFlowStyle[] = [
+  "natural",
+  "concise",
+  "warm",
+  "professional",
+  "literal",
+];
+
+const CleanupAndStyles: React.FC = () => {
+  const { t } = useTranslation();
+  const { getSetting, updateSetting, isUpdating } = useSettings();
+  const cleanupLevel = getSetting("cleanup_level") ?? "medium";
+  const profiles = getSetting("app_context_profiles") ?? [];
+
+  const updateStyle = async (
+    category: AppCategory,
+    freeflowStyle: FreeFlowStyle,
+  ) => {
+    const next = appCategories.map((name) => {
+      const current = profiles.find((profile) => profile.category === name) ?? {
+        category: name,
+        boundary_style:
+          name === "code" || name === "terminal" ? "literal" : "standard",
+        freeflow_style:
+          name === "code" || name === "terminal" ? "literal" : "natural",
+        surrounding_text_enabled: name !== "code" && name !== "terminal",
+        append_trailing_space: false,
+      };
+      return name === category
+        ? { ...current, freeflow_style: freeflowStyle }
+        : current;
+    });
+    await updateSetting("app_context_profiles", next as AppContextProfile[]);
+  };
+
+  return (
+    <>
+      <SettingContainer
+        title={t("settings.postProcessing.cleanup.level.title")}
+        description={t("settings.postProcessing.cleanup.level.description")}
+        layout="horizontal"
+        grouped
+      >
+        <Dropdown
+          options={(["none", "light", "medium", "high"] as CleanupLevel[]).map(
+            (value) => ({
+              value,
+              label: t(`settings.postProcessing.cleanup.level.${value}`),
+            }),
+          )}
+          selectedValue={cleanupLevel}
+          onSelect={(value) =>
+            updateSetting("cleanup_level", value as CleanupLevel)
+          }
+          disabled={isUpdating("cleanup_level")}
+        />
+      </SettingContainer>
+      <SettingContainer
+        title={t("settings.postProcessing.cleanup.styles.title")}
+        description={t("settings.postProcessing.cleanup.styles.description")}
+        layout="stacked"
+        grouped
+      >
+        <div className="space-y-2">
+          {appCategories.map((category) => {
+            const style =
+              profiles.find((profile) => profile.category === category)
+                ?.freeflow_style ??
+              (category === "code" || category === "terminal"
+                ? "literal"
+                : "natural");
+            return (
+              <div
+                key={category}
+                className="grid grid-cols-[minmax(7rem,1fr)_minmax(10rem,1fr)] items-center gap-3 rounded-md border border-mid-gray/20 px-3 py-2"
+              >
+                <span className="text-sm font-medium">
+                  {t(`settings.advanced.appContext.categories.${category}`)}
+                </span>
+                <Dropdown
+                  options={freeFlowStyles.map((value) => ({
+                    value,
+                    label: t(`settings.postProcessing.cleanup.styles.${value}`),
+                  }))}
+                  selectedValue={style}
+                  onSelect={(value) =>
+                    updateStyle(category, value as FreeFlowStyle)
+                  }
+                  disabled={isUpdating("app_context_profiles")}
+                />
+              </div>
+            );
+          })}
+        </div>
+      </SettingContainer>
+    </>
+  );
+};
 
 const PostProcessingSettingsApiComponent: React.FC = () => {
   const { t } = useTranslation();
@@ -544,14 +656,14 @@ export const PostProcessingSettings: React.FC = () => {
         />
       </SettingsGroup>
 
+      <SettingsGroup title={t("settings.postProcessing.cleanup.title")}>
+        <CleanupAndStyles />
+      </SettingsGroup>
+
       <SettingsGroup
         title={t("settings.postProcessing.localRuntime.groupTitle")}
       >
         <PostProcessingSettingsApi />
-      </SettingsGroup>
-
-      <SettingsGroup title={t("settings.postProcessing.prompts.title")}>
-        <PostProcessingSettingsPrompts />
       </SettingsGroup>
     </div>
   );

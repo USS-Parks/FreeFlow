@@ -620,6 +620,19 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async changeCleanupLevelSetting(
+    level: CleanupLevel,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("change_cleanup_level_setting", { level }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async changeLocalTransformTimeoutSetting(
     timeoutSeconds: number,
   ): Promise<Result<null, string>> {
@@ -1705,6 +1718,13 @@ export const events = __makeEvents__<{
 /** user-defined types **/
 
 export type AppBoundaryStyle = "standard" | "compact" | "literal";
+export type CleanupLevel = "none" | "light" | "medium" | "high";
+export type FreeFlowStyle =
+  | "natural"
+  | "concise"
+  | "warm"
+  | "professional"
+  | "literal";
 export type AppCategory =
   | "email"
   | "messaging"
@@ -1715,6 +1735,7 @@ export type AppCategory =
 export type AppContextProfile = {
   category: AppCategory;
   boundary_style: AppBoundaryStyle;
+  freeflow_style: FreeFlowStyle;
   surrounding_text_enabled: boolean;
   append_trailing_space: boolean;
 };
@@ -1785,6 +1806,7 @@ export type AppSettings = {
   post_process_models?: Partial<{ [key in string]: string }>;
   post_process_prompts?: LLMPrompt[];
   post_process_selected_prompt_id?: string | null;
+  cleanup_level?: CleanupLevel;
   local_transform_acceleration?: TransformAcceleration;
   local_transform_timeout_seconds?: number;
   mute_while_recording?: boolean;

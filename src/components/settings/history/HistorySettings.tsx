@@ -312,13 +312,7 @@ export const HistorySettings: React.FC = () => {
                 key={entry.id}
                 entry={entry}
                 onToggleSaved={() => toggleSaved(entry.id)}
-                onCopyText={() =>
-                  copyToClipboard(
-                    entry.post_processed_text?.trim().length
-                      ? entry.post_processed_text
-                      : entry.transcription_text,
-                  )
-                }
+                onCopyText={copyToClipboard}
                 getAudioUrl={getAudioUrl}
                 deleteAudio={deleteAudioEntry}
                 retryTranscription={retryHistoryEntry}
@@ -393,7 +387,7 @@ export const HistorySettings: React.FC = () => {
 interface HistoryEntryProps {
   entry: HistoryEntry;
   onToggleSaved: () => void;
-  onCopyText: () => void;
+  onCopyText: (text: string) => void;
   getAudioUrl: (fileName: string) => Promise<string | null>;
   deleteAudio: (id: number) => Promise<void>;
   retryTranscription: (id: number) => Promise<void>;
@@ -410,14 +404,16 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
   const { t, i18n } = useTranslation();
   const [showCopied, setShowCopied] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [useRaw, setUseRaw] = useState(false);
 
-  const displayedText = entry.post_processed_text?.trim().length
+  const finalText = entry.post_processed_text?.trim().length
     ? entry.post_processed_text
     : entry.transcription_text;
+  const displayedText = useRaw ? entry.raw_transcript : finalText;
   const hasTranscription = displayedText.trim().length > 0;
   const rawDiffers =
     entry.raw_transcript.trim().length > 0 &&
-    entry.raw_transcript.trim() !== displayedText.trim();
+    entry.raw_transcript.trim() !== finalText.trim();
 
   const handleLoadAudio = useCallback(
     () => getAudioUrl(entry.file_name),
@@ -429,7 +425,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       return;
     }
 
-    onCopyText();
+    onCopyText(displayedText);
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2000);
   };
@@ -578,14 +574,35 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       </p>
 
       {rawDiffers && (
-        <details className="text-xs text-text/60">
-          <summary className="cursor-pointer select-none">
-            {t("settings.history.rawTranscript")}
-          </summary>
-          <p className="mt-2 select-text whitespace-pre-wrap break-words">
-            {entry.raw_transcript}
-          </p>
-        </details>
+        <div className="space-y-2 rounded-md border border-mid-gray/20 p-3 text-xs text-text/60">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1 font-semibold text-text/70">
+                {t("settings.history.rawTranscript")}
+              </p>
+              <p className="select-text whitespace-pre-wrap break-words">
+                {entry.raw_transcript}
+              </p>
+            </div>
+            <div>
+              <p className="mb-1 font-semibold text-text/70">
+                {t("settings.history.finalTranscript")}
+              </p>
+              <p className="select-text whitespace-pre-wrap break-words">
+                {finalText}
+              </p>
+            </div>
+          </div>
+          <Button
+            onClick={() => setUseRaw((current) => !current)}
+            variant="secondary"
+            size="sm"
+          >
+            {useRaw
+              ? t("settings.history.redoCleanup")
+              : t("settings.history.undoCleanup")}
+          </Button>
+        </div>
       )}
 
       <AudioPlayer onLoadRequest={handleLoadAudio} className="w-full" />

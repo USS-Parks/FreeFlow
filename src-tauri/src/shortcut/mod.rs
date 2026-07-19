@@ -19,12 +19,10 @@ use specta::Type;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
     self, get_settings, AutoSubmitKey, ClipboardHandling, KeyboardImplementation, LLMPrompt,
     OverlayPosition, OverlayStyle, PasteMethod, ShortcutBinding, SoundTheme, Theme,
-    TransformAcceleration, TypingTool, APPLE_INTELLIGENCE_PROVIDER_ID, LOCAL_TRANSFORM_PROVIDER_ID,
+    TransformAcceleration, TypingTool, LOCAL_TRANSFORM_MODEL_ID, LOCAL_TRANSFORM_PROVIDER_ID,
 };
 use crate::tray;
 
@@ -1029,6 +1027,18 @@ pub fn change_local_transform_acceleration_setting(
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_cleanup_level_setting(
+    app: AppHandle,
+    level: settings::CleanupLevel,
+) -> Result<(), String> {
+    let mut app_settings = get_settings(&app);
+    app_settings.cleanup_level = level;
+    settings::write_settings(&app, app_settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn change_local_transform_timeout_setting(
     app: AppHandle,
     timeout_seconds: u64,
@@ -1227,34 +1237,10 @@ pub async fn fetch_post_process_models(
         .find(|p| p.id == provider_id)
         .ok_or_else(|| format!("Provider '{}' not found", provider_id))?;
 
-    if provider.id == APPLE_INTELLIGENCE_PROVIDER_ID {
-        #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-        {
-            return Ok(vec![APPLE_INTELLIGENCE_DEFAULT_MODEL_ID.to_string()]);
-        }
-
-        #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-        {
-            return Err("Apple Intelligence is only available on Apple silicon Macs running macOS 15 or later.".to_string());
-        }
+    if provider.id != LOCAL_TRANSFORM_PROVIDER_ID {
+        return Err("FreeFlow does not query remote model catalogs".to_string());
     }
-
-    // Get API key
-    let api_key = settings
-        .post_process_api_keys
-        .get(&provider_id)
-        .cloned()
-        .unwrap_or_default();
-
-    // Skip fetching if no API key for providers that typically need one
-    if api_key.trim().is_empty() && provider.id != "custom" {
-        return Err(format!(
-            "API key is required for {}. Please add an API key to list available models.",
-            provider.label
-        ));
-    }
-
-    crate::llm_client::fetch_models(provider, api_key).await
+    Ok(vec![LOCAL_TRANSFORM_MODEL_ID.to_string()])
 }
 
 #[tauri::command]

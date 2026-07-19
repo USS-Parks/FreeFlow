@@ -1,5 +1,3 @@
-#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
 use crate::audio_toolkit::{is_microphone_access_denied, is_no_input_device_error, VadPolicy};
 use crate::managers::audio::AudioRecordingManager;
@@ -8,7 +6,10 @@ use crate::managers::model::ModelManager;
 use crate::managers::transcription::{
     StreamWorkKind, TranscriptionManager, TranscriptionProgressEvent, TranscriptionProgressStage,
 };
-use crate::settings::{get_settings, AppSettings, OverlayStyle, APPLE_INTELLIGENCE_PROVIDER_ID};
+use crate::settings::{
+    get_settings, AppSettings, CleanupLevel, FreeFlowStyle, OverlayStyle,
+    LOCAL_TRANSFORM_PROVIDER_ID,
+};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
 use crate::utils::{
@@ -66,20 +67,6 @@ pub trait ShortcutAction: Send + Sync {
 struct TranscribeAction {
     post_process: bool,
     targets: Mutex<HashMap<String, crate::contracts::PlatformContext>>,
-}
-
-/// Field name for structured output JSON schema
-const TRANSCRIPTION_FIELD: &str = "transcription";
-
-/// Strip invisible Unicode characters that some LLMs may insert
-fn strip_invisible_chars(s: &str) -> String {
-    s.replace(['\u{200B}', '\u{200C}', '\u{200D}', '\u{FEFF}'], "")
-}
-
-/// Build a system prompt from the user's prompt template.
-/// Removes `${output}` placeholder since the transcription is sent as the user message.
-fn build_system_prompt(prompt_template: &str) -> String {
-    prompt_template.replace("${output}", "").trim().to_string()
 }
 
 /// Returns `true` when a transcription has no meaningful content to
@@ -140,10 +127,19 @@ fn should_use_streaming_overlay(style: OverlayStyle, is_streaming: bool) -> bool
     style == OverlayStyle::Live && is_streaming
 }
 
-fn accepted_local_transform_output(result: anyhow::Result<String>) -> Option<String> {
+fn accepted_local_transform_output(
+    input: &str,
+    level: CleanupLevel,
+    result: anyhow::Result<String>,
+) -> Option<String> {
     match result {
-        Ok(output) if !output.trim().is_empty() => Some(output),
-        Ok(_) => None,
+        Ok(output) => match crate::cleanup::validate_transform_output(input, &output, level) {
+            Ok(accepted) => Some(accepted),
+            Err(reason) => {
+                error!("Local transform rejected; preserving deterministic text: {reason}");
+                None
+            }
+        },
         Err(error) => {
             error!("Local transform failed; preserving raw transcript: {error}");
             None
@@ -155,7 +151,8 @@ async fn post_process_transcription(
     app: &AppHandle,
     settings: &AppSettings,
     transcription: &str,
-) -> Option<String> {
+    style: FreeFlowStyle,
+) -> Option<(String, String)> {
     if is_blank_transcription(transcription) {
         debug!("Post-processing skipped because the transcription is empty");
         return None;
@@ -168,6 +165,12 @@ async fn post_process_transcription(
             return None;
         }
     };
+
+    if provider.id != LOCAL_TRANSFORM_PROVIDER_ID
+        || !crate::cleanup::uses_local_transform(settings.cleanup_level)
+    {
+        return None;
+    }
 
     let model = settings
         .post_process_models
@@ -183,221 +186,13 @@ async fn post_process_transcription(
         return None;
     }
 
-    let selected_prompt_id = match &settings.post_process_selected_prompt_id {
-        Some(id) => id.clone(),
-        None => {
-            debug!("Post-processing skipped because no prompt is selected");
-            return None;
-        }
-    };
-
-    let prompt = match settings
-        .post_process_prompts
-        .iter()
-        .find(|prompt| prompt.id == selected_prompt_id)
-    {
-        Some(prompt) => prompt.prompt.clone(),
-        None => {
-            debug!(
-                "Post-processing skipped because prompt '{}' was not found",
-                selected_prompt_id
-            );
-            return None;
-        }
-    };
-
-    if prompt.trim().is_empty() {
-        debug!("Post-processing skipped because the selected prompt is empty");
-        return None;
-    }
-
-    if provider.id == crate::local_transform::LOCAL_TRANSFORM_PROVIDER_ID {
-        let system_prompt = build_system_prompt(&prompt);
-        return accepted_local_transform_output(
-            crate::local_transform::transform(app, settings, &system_prompt, transcription).await,
-        );
-    }
-
-    debug!(
-        "Starting LLM post-processing with provider '{}' (model: {})",
-        provider.id, model
-    );
-
-    let api_key = settings
-        .post_process_api_keys
-        .get(&provider.id)
-        .cloned()
-        .unwrap_or_default();
-
-    // Disable reasoning for providers where post-processing rarely benefits from it.
-    // - custom: top-level reasoning_effort (works for local OpenAI-compat servers)
-    // - openrouter: nested reasoning object; exclude:true also keeps reasoning text
-    //   out of the response so it can't pollute structured-output JSON parsing
-    let (reasoning_effort, reasoning) = match provider.id.as_str() {
-        "custom" => (Some("none".to_string()), None),
-        "openrouter" => (
-            None,
-            Some(crate::llm_client::ReasoningConfig {
-                effort: Some("none".to_string()),
-                exclude: Some(true),
-            }),
-        ),
-        _ => (None, None),
-    };
-
-    if provider.supports_structured_output {
-        debug!("Using structured outputs for provider '{}'", provider.id);
-
-        let system_prompt = build_system_prompt(&prompt);
-        let user_content = transcription.to_string();
-
-        // Handle Apple Intelligence separately since it uses native Swift APIs
-        if provider.id == APPLE_INTELLIGENCE_PROVIDER_ID {
-            #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-            {
-                if !apple_intelligence::check_apple_intelligence_availability() {
-                    debug!(
-                        "Apple Intelligence selected but not currently available on this device"
-                    );
-                    return None;
-                }
-
-                let token_limit = model.trim().parse::<i32>().unwrap_or(0);
-                return match apple_intelligence::process_text_with_system_prompt(
-                    &system_prompt,
-                    &user_content,
-                    token_limit,
-                ) {
-                    Ok(result) => {
-                        if result.trim().is_empty() {
-                            debug!("Apple Intelligence returned an empty response");
-                            None
-                        } else {
-                            let result = strip_invisible_chars(&result);
-                            debug!(
-                                "Apple Intelligence post-processing succeeded. Output length: {} chars",
-                                result.len()
-                            );
-                            Some(result)
-                        }
-                    }
-                    Err(err) => {
-                        error!("Apple Intelligence post-processing failed: {}", err);
-                        None
-                    }
-                };
-            }
-
-            #[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
-            {
-                debug!("Apple Intelligence provider selected on unsupported platform");
-                return None;
-            }
-        }
-
-        // Define JSON schema for transcription output
-        let json_schema = serde_json::json!({
-            "type": "object",
-            "properties": {
-                (TRANSCRIPTION_FIELD): {
-                    "type": "string",
-                    "description": "The cleaned and processed transcription text"
-                }
-            },
-            "required": [TRANSCRIPTION_FIELD],
-            "additionalProperties": false
-        });
-
-        match crate::llm_client::send_chat_completion_with_schema(
-            &provider,
-            api_key.clone(),
-            &model,
-            user_content,
-            Some(system_prompt),
-            Some(json_schema),
-            reasoning_effort.clone(),
-            reasoning.clone(),
-        )
-        .await
-        {
-            Ok(Some(content)) => {
-                // Parse the JSON response to extract the transcription field
-                match serde_json::from_str::<serde_json::Value>(&content) {
-                    Ok(json) => {
-                        if let Some(transcription_value) =
-                            json.get(TRANSCRIPTION_FIELD).and_then(|t| t.as_str())
-                        {
-                            let result = strip_invisible_chars(transcription_value);
-                            debug!(
-                                "Structured output post-processing succeeded for provider '{}'. Output length: {} chars",
-                                provider.id,
-                                result.len()
-                            );
-                            return Some(result);
-                        } else {
-                            error!("Structured output response missing 'transcription' field");
-                            return Some(strip_invisible_chars(&content));
-                        }
-                    }
-                    Err(e) => {
-                        error!(
-                            "Failed to parse structured output JSON: {}. Returning raw content.",
-                            e
-                        );
-                        return Some(strip_invisible_chars(&content));
-                    }
-                }
-            }
-            Ok(None) => {
-                error!("LLM API response has no content");
-                return None;
-            }
-            Err(e) => {
-                warn!(
-                    "Structured output failed for provider '{}': {}. Falling back to legacy mode.",
-                    provider.id, e
-                );
-                // Fall through to legacy mode below
-            }
-        }
-    }
-
-    // Legacy mode: Replace ${output} variable in the prompt with the actual text
-    let processed_prompt = prompt.replace("${output}", transcription);
-    debug!("Processed prompt length: {} chars", processed_prompt.len());
-
-    match crate::llm_client::send_chat_completion(
-        &provider,
-        api_key,
-        &model,
-        processed_prompt,
-        reasoning_effort,
-        reasoning,
+    let prompt = crate::cleanup::build_transform_prompt(settings.cleanup_level, style);
+    accepted_local_transform_output(
+        transcription,
+        settings.cleanup_level,
+        crate::local_transform::transform(app, settings, &prompt, transcription).await,
     )
-    .await
-    {
-        Ok(Some(content)) => {
-            let content = strip_invisible_chars(&content);
-            debug!(
-                "LLM post-processing succeeded for provider '{}'. Output length: {} chars",
-                provider.id,
-                content.len()
-            );
-            Some(content)
-        }
-        Ok(None) => {
-            error!("LLM API response has no content");
-            None
-        }
-        Err(e) => {
-            error!(
-                "LLM post-processing failed for provider '{}': {}. Falling back to original transcription.",
-                provider.id,
-                e
-            );
-            None
-        }
-    }
+    .map(|output| (output, prompt))
 }
 
 async fn maybe_convert_chinese_variant(
@@ -480,10 +275,11 @@ fn resolve_effective_language(app: &AppHandle, settings: &AppSettings) -> String
     }
 }
 
-pub(crate) async fn process_transcription_output(
+pub(crate) async fn process_transcription_output_for_application(
     app: &AppHandle,
     transcription: &str,
     post_process: bool,
+    application_id: Option<&str>,
 ) -> ProcessedTranscription {
     let settings = get_settings(app);
     let mut final_text = transcription.to_string();
@@ -500,26 +296,6 @@ pub(crate) async fn process_transcription_output(
         final_text = converted_text;
     }
 
-    if post_process {
-        if let Some(processed_text) = post_process_transcription(app, &settings, &final_text).await
-        {
-            post_processed_text = Some(processed_text.clone());
-            final_text = processed_text;
-
-            if let Some(prompt_id) = &settings.post_process_selected_prompt_id {
-                if let Some(prompt) = settings
-                    .post_process_prompts
-                    .iter()
-                    .find(|prompt| &prompt.id == prompt_id)
-                {
-                    post_process_prompt = Some(prompt.prompt.clone());
-                }
-            }
-        }
-    } else if final_text != transcription {
-        post_processed_text = Some(final_text.clone());
-    }
-
     let voice_output = crate::audio_toolkit::apply_voice_controls(
         &final_text,
         &effective_language,
@@ -528,6 +304,28 @@ pub(crate) async fn process_transcription_output(
     let submit_requested = voice_output.submit_requested;
     if voice_output.text != final_text {
         final_text = voice_output.text;
+        post_processed_text = Some(final_text.clone());
+    }
+
+    if post_process {
+        let deterministic = crate::cleanup::preprocess(&final_text, settings.cleanup_level);
+        if deterministic != final_text {
+            final_text = deterministic;
+            post_processed_text = Some(final_text.clone());
+        }
+
+        let style = crate::platform_context::profile_for_application(&settings, application_id)
+            .freeflow_style;
+        if let Some((processed_text, prompt)) =
+            post_process_transcription(app, &settings, &final_text, style).await
+        {
+            if processed_text != final_text {
+                final_text = processed_text;
+                post_processed_text = Some(final_text.clone());
+            }
+            post_process_prompt = Some(prompt);
+        }
+    } else if final_text != transcription {
         post_processed_text = Some(final_text.clone());
     }
 
@@ -934,7 +732,14 @@ impl ShortcutAction for TranscribeAction {
                                 }
                             }
                             let Some(processed) = complete_unless_cancelled(
-                                process_transcription_output(&ah, &outcome.text, post_process),
+                                process_transcription_output_for_application(
+                                    &ah,
+                                    &outcome.text,
+                                    post_process,
+                                    captured_target
+                                        .as_ref()
+                                        .and_then(|target| target.application_id.as_deref()),
+                                ),
                                 || rm.was_cancelled_since(cancel_generation),
                             )
                             .await
@@ -1211,7 +1016,7 @@ mod tests {
         accepted_local_transform_output, complete_unless_cancelled, has_deliverable_output,
         is_blank_transcription, should_use_streaming_overlay, ProcessedTranscription,
     };
-    use crate::settings::OverlayStyle;
+    use crate::settings::{CleanupLevel, OverlayStyle};
     use std::future;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
@@ -1287,10 +1092,20 @@ mod tests {
     #[test]
     fn local_transform_failures_leave_raw_transcript_authoritative() {
         for failure in ["cancelled", "corrupt model", "timeout", "memory pressure"] {
-            assert!(accepted_local_transform_output(Err(anyhow::anyhow!(failure))).is_none());
+            assert!(accepted_local_transform_output(
+                "Clean text.",
+                CleanupLevel::Medium,
+                Err(anyhow::anyhow!(failure))
+            )
+            .is_none());
         }
         assert_eq!(
-            accepted_local_transform_output(Ok("Clean text.".to_string())).as_deref(),
+            accepted_local_transform_output(
+                "Clean text.",
+                CleanupLevel::Medium,
+                Ok("Clean text.".to_string())
+            )
+            .as_deref(),
             Some("Clean text.")
         );
     }

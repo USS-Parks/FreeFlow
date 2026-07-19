@@ -53,6 +53,8 @@ export const AppContextSettings: React.FC = React.memo(() => {
         category: name,
         boundary_style:
           name === "code" || name === "terminal" ? "literal" : "standard",
+        freeflow_style:
+          name === "code" || name === "terminal" ? "literal" : "natural",
         surrounding_text_enabled: name !== "code" && name !== "terminal",
         append_trailing_space: false,
       };

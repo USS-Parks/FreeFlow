@@ -5,13 +5,13 @@ mod asr_evaluation;
 mod audio_feedback;
 pub mod audio_toolkit;
 mod catalog;
+mod cleanup;
 pub mod cli;
 mod clipboard;
 mod commands;
 pub mod contracts;
 mod helpers;
 mod input;
-mod llm_client;
 mod local_transform;
 mod managers;
 mod model_install;
@@ -1044,6 +1044,7 @@ pub fn run(cli_args: CliArgs) {
             shortcut::delete_post_process_prompt,
             shortcut::set_post_process_selected_prompt,
             shortcut::change_local_transform_acceleration_setting,
+            shortcut::change_cleanup_level_setting,
             shortcut::change_local_transform_timeout_setting,
             shortcut::update_custom_words,
             shortcut::suspend_binding,

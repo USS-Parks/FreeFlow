@@ -520,6 +520,26 @@
       }
     },
     "postProcessing": {
+      "cleanup": {
+        "title": "Cleanup and styles",
+        "level": {
+          "title": "Cleanup level",
+          "description": "Choose deterministic-only cleanup or optional bounded local rewriting.",
+          "none": "None",
+          "light": "Light",
+          "medium": "Medium",
+          "high": "High"
+        },
+        "styles": {
+          "title": "Application styles",
+          "description": "Choose an original FreeFlow writing style for each local application category.",
+          "natural": "Natural",
+          "concise": "Concise",
+          "warm": "Warm",
+          "professional": "Professional",
+          "literal": "Literal"
+        }
+      },
       "localRuntime": {
         "groupTitle": "Local transform runtime",
         "title": "Verified local runtime",
@@ -605,6 +625,9 @@
       "transcribing": "ट्रांसक्राइब हो रहा है...",
       "transcriptionFailed": "ट्रांसक्रिप्शन नहीं हो सका. आप रीट्राई आइकन से फिर से ट्रांसक्राइब कर सकते हैं.",
       "rawTranscript": "Raw engine transcript",
+      "finalTranscript": "Final transcript",
+      "undoCleanup": "Use raw transcript",
+      "redoCleanup": "Use cleaned transcript",
       "searchPlaceholder": "Search text, app, window, or model...",
       "searchLabel": "Search transcription history",
       "clearAll": "Clear all",

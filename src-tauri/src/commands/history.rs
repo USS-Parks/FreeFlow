@@ -1,4 +1,4 @@
-use crate::actions::process_transcription_output;
+use crate::actions::process_transcription_output_for_application;
 use crate::managers::{
     history::{HistoryManager, PaginatedHistory},
     transcription::{TranscriptionManager, TranscriptionProgressEvent, TranscriptionProgressStage},
@@ -183,8 +183,13 @@ pub async fn retry_history_entry_transcription(
             None,
         );
     }
-    let processed =
-        process_transcription_output(&app, &outcome.text, entry.post_process_requested).await;
+    let processed = process_transcription_output_for_application(
+        &app,
+        &outcome.text,
+        entry.post_process_requested,
+        entry.application_id.as_deref(),
+    )
+    .await;
     if never_store {
         history_manager
             .delete_entry(id)
