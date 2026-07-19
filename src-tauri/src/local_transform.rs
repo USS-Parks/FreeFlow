@@ -27,6 +27,7 @@ const INSTALL_MARKER: &str = "install.json";
 const MAX_SYSTEM_PROMPT_CHARS: usize = 4_000;
 const MAX_INPUT_CHARS: usize = 12_000;
 const MAX_OUTPUT_TOKENS: usize = 512;
+const MAX_SELECTED_OUTPUT_TOKENS: usize = 1_536;
 const ESTIMATED_PEAK_MEMORY_BYTES: u64 = 512 * 1024 * 1024;
 
 static INSTALL_CANCELLATION: Lazy<Mutex<Option<CancellationToken>>> =
@@ -776,13 +777,13 @@ fn bounded_request(system_prompt: &str, input: &str) -> Result<(String, String)>
     ))
 }
 
-fn output_token_limit(input: &str) -> usize {
+fn output_token_limit(input: &str, ceiling: usize) -> usize {
     input
         .split_whitespace()
         .count()
         .saturating_mul(3)
         .saturating_add(32)
-        .clamp(32, MAX_OUTPUT_TOKENS)
+        .clamp(32, ceiling)
 }
 
 fn loopback_port() -> Result<u16> {
@@ -840,6 +841,45 @@ pub async fn transform(
     system_prompt: &str,
     input: &str,
 ) -> Result<String> {
+    transform_with_limits(
+        app,
+        settings,
+        system_prompt,
+        input,
+        2_048,
+        MAX_OUTPUT_TOKENS,
+    )
+    .await
+}
+
+/// Selected-text transforms support the advertised 1,000-word boundary. Their
+/// larger context/output budget is explicit and does not change automatic
+/// cleanup's tighter latency and expansion envelope.
+pub async fn transform_selected(
+    app: &AppHandle,
+    settings: &AppSettings,
+    system_prompt: &str,
+    input: &str,
+) -> Result<String> {
+    transform_with_limits(
+        app,
+        settings,
+        system_prompt,
+        input,
+        8_192,
+        MAX_SELECTED_OUTPUT_TOKENS,
+    )
+    .await
+}
+
+async fn transform_with_limits(
+    app: &AppHandle,
+    settings: &AppSettings,
+    system_prompt: &str,
+    input: &str,
+    context_size: usize,
+    output_ceiling: usize,
+) -> Result<String> {
     let paths = transform_paths(app)?;
     let runtime = runtime_manifest()?;
     if !runtime_verified(&paths, &runtime) || !model_verified(&paths) {
@@ -871,7 +911,7 @@ pub async fn transform(
         .arg("--port")
         .arg(port.to_string())
         .arg("--ctx-size")
-        .arg("2048")
+        .arg(context_size.to_string())
         .arg("--threads")
         .arg(threads)
         .arg("--gpu-layers")
@@ -927,7 +967,7 @@ pub async fn transform(
                     { "role": "user", "content": input }
                 ],
                 "temperature": 0,
-                "max_tokens": output_token_limit(&input),
+                "max_tokens": output_token_limit(&input, output_ceiling),
                 "stream": false
             }))
             .send()
@@ -1041,10 +1081,14 @@ mod tests {
 
     #[test]
     fn output_budget_is_bounded() {
-        assert_eq!(output_token_limit("one"), 35);
+        assert_eq!(output_token_limit("one", MAX_OUTPUT_TOKENS), 35);
         assert_eq!(
-            output_token_limit(&"word ".repeat(10_000)),
+            output_token_limit(&"word ".repeat(10_000), MAX_OUTPUT_TOKENS),
             MAX_OUTPUT_TOKENS
+        );
+        assert_eq!(
+            output_token_limit(&"word ".repeat(1_000), MAX_SELECTED_OUTPUT_TOKENS),
+            MAX_SELECTED_OUTPUT_TOKENS
         );
     }
 

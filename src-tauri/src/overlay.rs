@@ -52,7 +52,9 @@ const OVERLAY_STREAM_HEIGHT: f64 = 120.0;
 
 /// Overlay window size (logical) for a given UI state.
 fn overlay_dimensions(state: &str) -> (f64, f64) {
-    if state == "streaming" {
+    if state.starts_with("transform_") && state != "transform_processing" {
+        (540.0, 320.0)
+    } else if state == "streaming" {
         (OVERLAY_STREAM_WIDTH, OVERLAY_STREAM_HEIGHT)
     } else {
         (OVERLAY_WIDTH, OVERLAY_HEIGHT)
@@ -503,11 +505,15 @@ pub fn create_recording_overlay(app_handle: &AppHandle) {
     }
 }
 
-fn show_overlay_state(app_handle: &AppHandle, state: &str) -> u64 {
+fn show_overlay_state_with_override(
+    app_handle: &AppHandle,
+    state: &str,
+    force_visible: bool,
+) -> u64 {
     // Whether the overlay shows at all is governed by overlay_style; position
     // only chooses Top vs Bottom placement.
     let settings = settings::get_settings(app_handle);
-    if settings.overlay_style == OverlayStyle::None {
+    if !force_visible && settings.overlay_style == OverlayStyle::None {
         return 0;
     }
     let generation = OVERLAY_PRESENTATION_GENERATION.fetch_add(1, Ordering::AcqRel) + 1;
@@ -551,6 +557,16 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str) -> u64 {
         );
     }
     generation
+}
+
+fn show_overlay_state(app_handle: &AppHandle, state: &str) -> u64 {
+    show_overlay_state_with_override(app_handle, state, false)
+}
+
+/// Selected-text transforms require a non-focus-stealing preview even when the
+/// recording status overlay is disabled.
+pub fn show_transform_overlay(app_handle: &AppHandle, state: &str) {
+    show_overlay_state_with_override(app_handle, state, true);
 }
 
 /// Shows the recording overlay window with fade-in animation

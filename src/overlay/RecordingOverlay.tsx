@@ -8,6 +8,7 @@ import type {
   StreamPhaseEvent,
   StreamTextEvent,
   StreamWorkKind,
+  SelectedTransformSession,
 } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
 import { getLanguageDirection } from "@/lib/utils/rtl";
@@ -19,7 +20,13 @@ type OverlayState =
   | "processing"
   | "success"
   | "warning"
-  | "error";
+  | "error"
+  | "transform_processing"
+  | "transform_preview"
+  | "transform_applied"
+  | "transform_undone"
+  | "transform_unchanged"
+  | "transform_error";
 
 // Number of reactive bars in the waveform (the simple, smoothed style shared by
 // every overlay form). Mic levels arrive as 16 FFT buckets; we take the first N.
@@ -37,6 +44,9 @@ const RecordingOverlay: React.FC = () => {
   const [phase, setPhase] = useState<StreamPhase>("listening");
   const [workKind, setWorkKind] = useState<StreamWorkKind>("transcribing");
   const [elapsed, setElapsed] = useState(0);
+  const [transformSession, setTransformSession] =
+    useState<SelectedTransformSession | null>(null);
+  const [transformError, setTransformError] = useState("");
   // Bumped on each new streaming session so the Live card remounts fresh (replays
   // the pop-in, and never animates in from the previous panel's open size).
   const [session, setSession] = useState(0);
@@ -116,12 +126,26 @@ const RecordingOverlay: React.FC = () => {
         if (payload.kind) setWorkKind(payload.kind);
       });
 
+      const unlistenTransform = await listen<SelectedTransformSession>(
+        "selected-transform-updated",
+        ({ payload }) => {
+          setTransformSession(payload);
+          setTransformError(payload.error ?? "");
+        },
+      );
+      const unlistenTransformError = await listen<{ message: string }>(
+        "selected-transform-error",
+        ({ payload }) => setTransformError(payload.message),
+      );
+
       return () => {
         unlistenShow();
         unlistenHide();
         unlistenLevel();
         unlistenStream();
         unlistenPhase();
+        unlistenTransform();
+        unlistenTransformError();
       };
     };
 
@@ -211,6 +235,136 @@ const RecordingOverlay: React.FC = () => {
             : t("overlay.transcribing")
           : t("overlay.recording")
         : t(`overlay.${state}`);
+
+  const runTransformAction = async (
+    action: () => Promise<
+      { status: "ok" } | { status: "error"; error: string }
+    >,
+  ) => {
+    setTransformError("");
+    const result = await action();
+    if (result.status === "error") setTransformError(result.error);
+  };
+
+  if (state.startsWith("transform_") && state !== "transform_processing") {
+    const sessionId = transformSession?.id ?? "";
+    const canPreview = transformSession?.status === "preview";
+    const canUndo = transformSession?.status === "applied";
+    const canRetry =
+      transformSession?.status === "preview" ||
+      transformSession?.status === "undone" ||
+      transformSession?.status === "unchanged" ||
+      transformSession?.status === "failed";
+    return (
+      <div
+        dir={direction}
+        className={`ov-stage ${position} ov-fade ${isVisible ? "show" : ""}`}
+      >
+        <section
+          className="scard transform-card"
+          role="dialog"
+          aria-label={t("overlay.transform.title")}
+        >
+          <header className="transform-header">
+            <div>
+              <span className="transform-eyebrow">
+                {t("overlay.transform.title")}
+              </span>
+              <strong>
+                {transformSession?.slot_name ?? t("overlay.transform.failed")}
+              </strong>
+            </div>
+            <button
+              className="sx"
+              aria-label={t("overlay.transform.dismiss")}
+              onClick={() => {
+                void runTransformAction(() =>
+                  commands.dismissSelectedTransform(sessionId),
+                );
+              }}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M4 4 L12 12 M12 4 L4 12"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </header>
+          {transformError ? (
+            <p className="transform-error" role="alert">
+              {transformError}
+            </p>
+          ) : transformSession?.status === "unchanged" ? (
+            <p className="transform-note">{t("overlay.transform.unchanged")}</p>
+          ) : (
+            <div
+              className="transform-diff"
+              aria-label={t("overlay.transform.diff")}
+            >
+              {transformSession?.diff.map((segment, index) => (
+                <span key={index} className={`diff-${segment.kind}`}>
+                  {segment.text}
+                </span>
+              ))}
+            </div>
+          )}
+          <footer className="transform-actions">
+            {canPreview && (
+              <button
+                className="transform-action primary"
+                onClick={() =>
+                  void runTransformAction(() =>
+                    commands.acceptSelectedTransform(sessionId),
+                  )
+                }
+              >
+                {t("overlay.transform.accept")}
+              </button>
+            )}
+            {canUndo && (
+              <button
+                className="transform-action primary"
+                onClick={() =>
+                  void runTransformAction(() =>
+                    commands.undoSelectedTransform(sessionId),
+                  )
+                }
+              >
+                {t("overlay.transform.undo")}
+              </button>
+            )}
+            {canRetry && (
+              <button
+                className="transform-action"
+                onClick={() =>
+                  void runTransformAction(() =>
+                    commands.retrySelectedTransform(sessionId),
+                  )
+                }
+              >
+                {t("overlay.transform.retry")}
+              </button>
+            )}
+            {!!transformSession?.output_text && (
+              <button
+                className="transform-action"
+                onClick={() =>
+                  void runTransformAction(() =>
+                    commands.copySelectedTransform(sessionId),
+                  )
+                }
+              >
+                {t("overlay.transform.copy")}
+              </button>
+            )}
+          </footer>
+        </section>
+      </div>
+    );
+  }
 
   if (state === "success" || state === "warning" || state === "error") {
     return (
@@ -324,9 +478,12 @@ const RecordingOverlay: React.FC = () => {
   // ---- Minimal overlay: exactly one row at a time — waveform (recording), or a
   // spinner + label (transcribing / processing). Never both. The pill animates its
   // width between them; the cancel button is in both rows so it stays put.
-  const working = state === "transcribing" || state === "processing";
+  const working =
+    state === "transcribing" ||
+    state === "processing" ||
+    state === "transform_processing";
   const workLabel =
-    state === "processing"
+    state === "processing" || state === "transform_processing"
       ? t("overlay.processing")
       : t("overlay.transcribing");
 
@@ -345,7 +502,9 @@ const RecordingOverlay: React.FC = () => {
         aria-atomic="true"
         aria-label={stateLabel}
       >
-        {working ? workingRow(workLabel, true) : listeningRow(false, true)}
+        {working
+          ? workingRow(workLabel, state !== "transform_processing")
+          : listeningRow(false, true)}
       </div>
     </div>
   );

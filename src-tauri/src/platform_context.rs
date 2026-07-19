@@ -5,6 +5,7 @@ use specta::Type;
 use tauri::AppHandle;
 
 const CONTEXT_WINDOW_CHARS: usize = 16;
+const SELECTED_TEXT_CAPTURE_CHARS: i32 = 12_001;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -28,7 +29,38 @@ pub struct ContextDiagnostics {
 }
 
 pub fn capture_active_target(settings: &AppSettings) -> PlatformContext {
-    capture_platform_target(settings)
+    capture_platform_target(settings, false)
+}
+
+/// Reads selected text only for an explicit transform action. Ordinary target
+/// capture never reads selection contents.
+pub fn capture_selected_target(settings: &AppSettings) -> PlatformContext {
+    capture_platform_target(settings, true)
+}
+
+pub fn selected_text_block_reason(
+    settings: &AppSettings,
+    context: &PlatformContext,
+) -> Option<&'static str> {
+    if !context.secure_field_known {
+        Some("target_security_unknown")
+    } else if context.secure_field {
+        Some("secure_field")
+    } else if is_remote_application(context.application_id.as_deref()) {
+        Some("remote_application")
+    } else if is_denied_application(settings, context.application_id.as_deref()) {
+        Some("denied_application")
+    } else if context.target_id.is_none() {
+        Some("target_identity_unavailable")
+    } else if context
+        .selected_text
+        .as_deref()
+        .is_none_or(|text| text.trim().is_empty())
+    {
+        Some("no_selection")
+    } else {
+        None
+    }
 }
 
 pub fn classify_application(application_id: Option<&str>) -> AppCategory {
@@ -177,7 +209,7 @@ pub fn same_target(left: &PlatformContext, right: &PlatformContext) -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
+fn capture_platform_target(settings: &AppSettings, read_selected_text: bool) -> PlatformContext {
     use std::path::Path;
     use windows::core::{BOOL, PWSTR};
     use windows::Win32::Foundation::CloseHandle;
@@ -245,7 +277,8 @@ fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
 
     unsafe fn focused_accessibility(
         read_preceding_text: bool,
-    ) -> Option<(bool, String, Option<String>)> {
+        read_selected_text: bool,
+    ) -> Option<(bool, String, Option<String>, Option<String>)> {
         let initialized = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
         let result = (|| {
             let automation: IUIAutomation =
@@ -254,15 +287,31 @@ fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
             let secure = element.CurrentIsPassword().ok()?.as_bool();
             let runtime_id = runtime_id(&element);
             if secure {
-                return Some((true, String::new(), runtime_id));
+                return Some((true, String::new(), runtime_id, None));
             }
+
+            let pattern: Option<IUIAutomationTextPattern2> =
+                element.GetCurrentPatternAs(UIA_TextPattern2Id).ok();
+
+            let selected_text = (|| {
+                if !read_selected_text {
+                    return None;
+                }
+                let pattern = pattern.as_ref()?;
+                let ranges = pattern.GetSelection().ok()?;
+                if ranges.Length().ok()? != 1 {
+                    return None;
+                }
+                let range = ranges.GetElement(0).ok()?;
+                let text = range.GetText(SELECTED_TEXT_CAPTURE_CHARS).ok()?.to_string();
+                (!text.trim().is_empty()).then_some(text)
+            })();
 
             let preceding = (|| {
                 if !read_preceding_text {
                     return None;
                 }
-                let pattern: IUIAutomationTextPattern2 =
-                    element.GetCurrentPatternAs(UIA_TextPattern2Id).ok()?;
+                let pattern = pattern.as_ref()?;
                 let mut active = BOOL(0);
                 let caret = pattern.GetCaretRange(&mut active).ok()?;
                 if !active.as_bool() {
@@ -286,7 +335,7 @@ fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
                 }
             })()
             .unwrap_or_default();
-            Some((false, preceding, runtime_id))
+            Some((false, preceding, runtime_id, selected_text))
         })();
         if initialized {
             CoUninitialize();
@@ -312,24 +361,29 @@ fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
         let mut process_id = 0_u32;
         GetWindowThreadProcessId(window, Some(&mut process_id));
         let application_id = process_name(process_id);
-        let accessibility =
-            focused_accessibility(profile_allows_context(settings, application_id.as_deref()));
+        let accessibility = focused_accessibility(
+            profile_allows_context(settings, application_id.as_deref()),
+            read_selected_text,
+        );
         let secure_field = accessibility
             .as_ref()
-            .map(|(secure, _, _)| *secure)
+            .map(|(secure, _, _, _)| *secure)
             .unwrap_or(false);
         let preceding_text = accessibility
             .as_ref()
-            .and_then(|(secure, text, _)| (!*secure && !text.is_empty()).then(|| text.clone()));
+            .and_then(|(secure, text, _, _)| (!*secure && !text.is_empty()).then(|| text.clone()));
         let target_id = accessibility
             .as_ref()
-            .and_then(|(_, _, runtime_id)| runtime_id.as_ref())
+            .and_then(|(_, _, runtime_id, _)| runtime_id.as_ref())
             .map(|runtime_id| format!("windows:{process_id}:{runtime_id}"));
+        let selected_text = accessibility
+            .as_ref()
+            .and_then(|(_, _, _, selected)| selected.clone());
 
         PlatformContext {
             application_id,
             window_title,
-            selected_text: None,
+            selected_text,
             secure_field,
             secure_field_known: accessibility.is_some(),
             target_id,
@@ -339,7 +393,7 @@ fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
 }
 
 #[cfg(target_os = "macos")]
-fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
+fn capture_platform_target(settings: &AppSettings, read_selected_text: bool) -> PlatformContext {
     use core_foundation::base::{CFRange, CFType, CFTypeRef, TCFType};
     use core_foundation::string::{CFString, CFStringRef};
     use std::ffi::c_void;
@@ -478,7 +532,11 @@ fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
         PlatformContext {
             application_id,
             window_title,
-            selected_text: None,
+            selected_text: (read_selected_text && secure_field_known && !secure_field)
+                .then(|| copy_attribute(focused_ref, "AXSelectedText"))
+                .flatten()
+                .and_then(|value| as_string(&value))
+                .filter(|text| !text.trim().is_empty()),
             secure_field,
             secure_field_known,
             // Core Foundation hashes AX elements by their underlying
@@ -493,7 +551,7 @@ fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn capture_platform_target(_settings: &AppSettings) -> PlatformContext {
+fn capture_platform_target(_settings: &AppSettings, _read_selected_text: bool) -> PlatformContext {
     PlatformContext::default()
 }
 
@@ -501,7 +559,7 @@ fn capture_platform_target(_settings: &AppSettings) -> PlatformContext {
 mod tests {
     use super::{
         classify_application, context_access_status, diagnostics, profile_for_application,
-        same_target, ContextAccessStatus,
+        same_target, selected_text_block_reason, ContextAccessStatus,
     };
     use crate::contracts::PlatformContext;
     use crate::settings::{get_default_settings, AppBoundaryStyle, AppCategory};
@@ -625,5 +683,40 @@ mod tests {
         assert_eq!(result.category, AppCategory::Document);
         assert_eq!(result.captured_characters, 10);
         assert_eq!(result.window_title.as_deref(), Some("Document"));
+    }
+
+    #[test]
+    fn explicit_selection_capture_still_fails_closed_for_sensitive_targets() {
+        let mut settings = get_default_settings();
+        settings.app_context_denylist = vec!["denied.exe".into()];
+        let base = PlatformContext {
+            application_id: Some("editor.exe".into()),
+            selected_text: Some("selected text".into()),
+            secure_field_known: true,
+            target_id: Some("target".into()),
+            ..PlatformContext::default()
+        };
+        assert_eq!(selected_text_block_reason(&settings, &base), None);
+
+        let mut secure = base.clone();
+        secure.secure_field = true;
+        assert_eq!(
+            selected_text_block_reason(&settings, &secure),
+            Some("secure_field")
+        );
+
+        let mut denied = base.clone();
+        denied.application_id = Some("denied.exe".into());
+        assert_eq!(
+            selected_text_block_reason(&settings, &denied),
+            Some("denied_application")
+        );
+
+        let mut remote = base;
+        remote.application_id = Some("mstsc.exe".into());
+        assert_eq!(
+            selected_text_block_reason(&settings, &remote),
+            Some("remote_application")
+        );
     }
 }

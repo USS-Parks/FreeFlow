@@ -115,6 +115,17 @@ pub fn change_binding(
 
     let mut settings = settings::get_settings(&app);
 
+    if let Some(conflicting_id) = shortcut_conflict(&settings.bindings, &id, &binding) {
+        return Ok(BindingResponse {
+            success: false,
+            binding: None,
+            error: Some(format!(
+                "Shortcut '{}' is already assigned to '{}'",
+                binding, conflicting_id
+            )),
+        });
+    }
+
     // Get the binding to modify, or create it from defaults if it doesn't exist
     let binding_to_modify = match settings.bindings.get(&id) {
         Some(binding) => binding.clone(),
@@ -157,12 +168,6 @@ pub fn change_binding(
         }
     }
 
-    // Unregister the existing binding
-    if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
-        let error_msg = format!("Failed to unregister shortcut: {}", e);
-        error!("change_binding error: {}", error_msg);
-    }
-
     // Validate the new shortcut for the current keyboard implementation
     if let Err(e) = validate_shortcut_for_implementation(&binding, settings.keyboard_implementation)
     {
@@ -170,12 +175,24 @@ pub fn change_binding(
         return Err(e);
     }
 
+    // Unregister only after validation and conflict checks have succeeded.
+    if let Err(e) = unregister_shortcut(&app, binding_to_modify.clone()) {
+        let error_msg = format!("Failed to unregister shortcut: {}", e);
+        error!("change_binding error: {}", error_msg);
+    }
+
     // Create an updated binding
-    let mut updated_binding = binding_to_modify;
+    let mut updated_binding = binding_to_modify.clone();
     updated_binding.current_binding = binding;
 
     // Register the new binding
     if let Err(e) = register_shortcut(&app, updated_binding.clone()) {
+        if let Err(restore_error) = register_shortcut(&app, binding_to_modify.clone()) {
+            error!(
+                "Failed to restore shortcut '{}' after rejected update: {}",
+                binding_to_modify.id, restore_error
+            );
+        }
         let error_msg = format!("Failed to register shortcut: {}", e);
         error!("change_binding error: {}", error_msg);
         return Ok(BindingResponse {
@@ -197,6 +214,28 @@ pub fn change_binding(
         binding: Some(updated_binding),
         error: None,
     })
+}
+
+fn normalized_shortcut(raw: &str) -> String {
+    raw.split('+')
+        .map(|part| part.trim().to_ascii_lowercase())
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("+")
+}
+
+pub(crate) fn shortcut_conflict<'a>(
+    bindings: &'a std::collections::HashMap<String, ShortcutBinding>,
+    binding_id: &str,
+    candidate: &str,
+) -> Option<&'a str> {
+    let candidate = normalized_shortcut(candidate);
+    bindings
+        .iter()
+        .find(|(id, binding)| {
+            id.as_str() != binding_id && normalized_shortcut(&binding.current_binding) == candidate
+        })
+        .map(|(id, _)| id.as_str())
 }
 
 #[tauri::command]
@@ -381,10 +420,10 @@ fn register_all_shortcuts_for_implementation(
     implementation: KeyboardImplementation,
 ) -> Vec<String> {
     let mut reset_bindings = Vec::new();
-    let default_bindings = settings::get_default_settings().bindings;
     let mut current_settings = settings::get_settings(app);
+    let stored_bindings = current_settings.bindings.clone();
 
-    for (id, default_binding) in &default_bindings {
+    for (id, stored_binding) in &stored_bindings {
         // Skip cancel shortcut as it's dynamically registered
         if id == "cancel" {
             continue;
@@ -399,7 +438,7 @@ fn register_all_shortcuts_for_implementation(
             .bindings
             .get(id)
             .cloned()
-            .unwrap_or_else(|| default_binding.clone());
+            .unwrap_or_else(|| stored_binding.clone());
 
         // Validate the shortcut for the target implementation
         if let Err(e) =
@@ -411,7 +450,7 @@ fn register_all_shortcuts_for_implementation(
             );
 
             // Reset to default
-            binding.current_binding = default_binding.current_binding.clone();
+            binding.current_binding = binding.default_binding.clone();
             current_settings
                 .bindings
                 .insert(id.clone(), binding.clone());
@@ -1374,4 +1413,49 @@ pub async fn get_available_accelerators() -> crate::managers::transcription::Ava
     tauri::async_runtime::spawn_blocking(crate::managers::transcription::get_available_accelerators)
         .await
         .expect("get_available_accelerators panicked")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shortcut_conflict;
+    use crate::settings::{get_default_settings, ShortcutBinding};
+
+    #[test]
+    fn shortcut_conflicts_are_case_and_whitespace_insensitive() {
+        let bindings = get_default_settings().bindings;
+        let polish = bindings["transform_slot_polish"].current_binding.clone();
+        let spaced = polish
+            .split('+')
+            .map(|part| format!(" {} ", part.to_ascii_uppercase()))
+            .collect::<Vec<_>>()
+            .join("+");
+        assert_eq!(
+            shortcut_conflict(&bindings, "transform_slot_shorten", &spaced),
+            Some("transform_slot_polish")
+        );
+        assert_eq!(
+            shortcut_conflict(&bindings, "transform_slot_polish", &polish),
+            None
+        );
+    }
+
+    #[test]
+    fn shortcut_conflict_reports_the_existing_binding_without_mutation() {
+        let mut bindings = std::collections::HashMap::new();
+        bindings.insert(
+            "existing".to_string(),
+            ShortcutBinding {
+                id: "existing".into(),
+                name: "Existing".into(),
+                description: String::new(),
+                default_binding: "ctrl+7".into(),
+                current_binding: "ctrl+7".into(),
+            },
+        );
+        assert_eq!(
+            shortcut_conflict(&bindings, "new", "CTRL+7"),
+            Some("existing")
+        );
+        assert_eq!(bindings["existing"].current_binding, "ctrl+7");
+    }
 }

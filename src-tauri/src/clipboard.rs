@@ -918,6 +918,27 @@ pub fn paste(
     captured_target: Option<PlatformContext>,
     submit_requested: bool,
 ) -> Result<InsertionOutcome, String> {
+    paste_with_policy(text, app_handle, captured_target, submit_requested, false)
+}
+
+/// Replaces an explicit selection without applying dictation boundary rules or
+/// auto-submit. The target/security guard and lossless clipboard fallback are
+/// the same ones used by normal insertion.
+pub fn replace_selection(
+    text: String,
+    app_handle: AppHandle,
+    captured_target: PlatformContext,
+) -> Result<InsertionOutcome, String> {
+    paste_with_policy(text, app_handle, Some(captured_target), false, true)
+}
+
+fn paste_with_policy(
+    text: String,
+    app_handle: AppHandle,
+    captured_target: Option<PlatformContext>,
+    submit_requested: bool,
+    exact_replacement: bool,
+) -> Result<InsertionOutcome, String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
     let paste_delay_ms = settings.paste_delay_ms;
@@ -927,18 +948,23 @@ pub fn paste(
     let captured_target = captured_target.unwrap_or_else(|| current_target.clone());
     let block_reason = insertion_block_reason(&captured_target, &current_target);
     let profile = profile_for_application(&settings, current_target.application_id.as_deref());
-    let text = prepare_text_for_boundary(
-        &text,
-        current_target.preceding_text.as_deref(),
-        settings.append_trailing_space || profile.append_trailing_space,
-        profile.boundary_style,
-    );
-    let should_submit = should_send_auto_submit(
-        settings.auto_submit,
-        settings.auto_submit_confirmed,
-        submit_requested,
-        paste_method,
-    );
+    let text = if exact_replacement {
+        text
+    } else {
+        prepare_text_for_boundary(
+            &text,
+            current_target.preceding_text.as_deref(),
+            settings.append_trailing_space || profile.append_trailing_space,
+            profile.boundary_style,
+        )
+    };
+    let should_submit = !exact_replacement
+        && should_send_auto_submit(
+            settings.auto_submit,
+            settings.auto_submit_confirmed,
+            submit_requested,
+            paste_method,
+        );
 
     info!(
         "Using paste method: {:?}, delay before: {}ms, delay after: {}ms",

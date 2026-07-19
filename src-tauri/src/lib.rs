@@ -18,6 +18,7 @@ mod model_install;
 mod overlay;
 mod platform_context;
 pub mod portable;
+mod selected_transform;
 mod settings;
 mod shortcut;
 mod signal_handle;
@@ -196,6 +197,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(dictionary_manager.clone());
     app_handle.manage(snippet_manager.clone());
     app_handle.manage(clipboard::InsertionState::new());
+    app_handle.manage(selected_transform::SelectedTransformState::new());
     app_handle.manage(tray::CurrentTrayIconState::new());
 
     // Note: Shortcuts are NOT initialized here.
@@ -1032,6 +1034,19 @@ pub fn run(cli_args: CliArgs) {
             local_transform::install_local_transform,
             local_transform::cancel_local_transform_install,
             local_transform::delete_local_transform_install,
+            selected_transform::start_selected_transform,
+            selected_transform::get_selected_transform_session,
+            selected_transform::accept_selected_transform,
+            selected_transform::undo_selected_transform,
+            selected_transform::retry_selected_transform,
+            selected_transform::copy_selected_transform,
+            selected_transform::dismiss_selected_transform,
+            selected_transform::add_transform_slot,
+            selected_transform::update_transform_slot,
+            selected_transform::delete_transform_slot,
+            selected_transform::add_writing_sample,
+            selected_transform::update_writing_sample,
+            selected_transform::delete_writing_sample,
             shortcut::change_post_process_enabled_setting,
             shortcut::change_experimental_enabled_setting,
             shortcut::change_post_process_base_url_setting,

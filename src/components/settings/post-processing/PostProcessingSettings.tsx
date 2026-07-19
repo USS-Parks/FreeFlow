@@ -10,6 +10,7 @@ import {
   type AppContextProfile,
   type CleanupLevel,
   type FreeFlowStyle,
+  type Result,
 } from "@/bindings";
 
 import { Alert } from "../../ui/Alert";
@@ -633,6 +634,295 @@ const PostProcessingSettingsPromptsComponent: React.FC = () => {
   );
 };
 
+const SelectedTextTransforms: React.FC = () => {
+  const { t } = useTranslation();
+  const { getSetting, refreshSettings } = useSettings();
+  const slots = getSetting("transform_slots") ?? [];
+  const samples = getSetting("writing_samples") ?? [];
+  const [slotId, setSlotId] = useState("");
+  const [slotName, setSlotName] = useState("");
+  const [slotPrompt, setSlotPrompt] = useState("");
+  const [creatingSlot, setCreatingSlot] = useState(false);
+  const [sampleId, setSampleId] = useState("");
+  const [sampleName, setSampleName] = useState("");
+  const [sampleText, setSampleText] = useState("");
+  const [creatingSample, setCreatingSample] = useState(false);
+  const [error, setError] = useState("");
+
+  const selectedSlot = slots.find((slot) => slot.id === slotId) ?? slots[0];
+  const selectedSample =
+    samples.find((sample) => sample.id === sampleId) ?? samples[0];
+
+  useEffect(() => {
+    if (creatingSlot) return;
+    if (selectedSlot) {
+      setSlotId(selectedSlot.id);
+      setSlotName(selectedSlot.name);
+      setSlotPrompt(selectedSlot.prompt);
+    }
+  }, [
+    creatingSlot,
+    selectedSlot?.id,
+    selectedSlot?.name,
+    selectedSlot?.prompt,
+  ]);
+
+  useEffect(() => {
+    if (creatingSample) return;
+    if (selectedSample) {
+      setSampleId(selectedSample.id);
+      setSampleName(selectedSample.name);
+      setSampleText(selectedSample.text);
+    } else {
+      setSampleId("");
+      setSampleName("");
+      setSampleText("");
+    }
+  }, [
+    creatingSample,
+    selectedSample?.id,
+    selectedSample?.name,
+    selectedSample?.text,
+  ]);
+
+  const finish = async <T,>(response: Result<T, string>) => {
+    if (response.status === "error") {
+      setError(response.error ?? t("settings.transforms.errors.generic"));
+      return false;
+    }
+    setError("");
+    await refreshSettings();
+    return true;
+  };
+
+  const createSlot = async () => {
+    const result = await commands.addTransformSlot(slotName, slotPrompt);
+    if (await finish(result)) {
+      if (result.status === "ok") setSlotId(result.data.id);
+      setCreatingSlot(false);
+    }
+  };
+
+  const saveSlot = async () => {
+    if (!selectedSlot) return;
+    await finish(
+      await commands.updateTransformSlot(selectedSlot.id, slotName, slotPrompt),
+    );
+  };
+
+  const deleteSlot = async () => {
+    if (!selectedSlot) return;
+    if (await finish(await commands.deleteTransformSlot(selectedSlot.id))) {
+      setSlotId("");
+    }
+  };
+
+  const createSample = async () => {
+    const result = await commands.addWritingSample(sampleName, sampleText);
+    if (await finish(result)) {
+      if (result.status === "ok") setSampleId(result.data.id);
+      setCreatingSample(false);
+    }
+  };
+
+  const saveSample = async () => {
+    if (!selectedSample) return;
+    await finish(
+      await commands.updateWritingSample(
+        selectedSample.id,
+        sampleName,
+        sampleText,
+      ),
+    );
+  };
+
+  const deleteSample = async () => {
+    if (!selectedSample) return;
+    if (await finish(await commands.deleteWritingSample(selectedSample.id))) {
+      setSampleId("");
+    }
+  };
+
+  const selectSlot = (id: string | null) => {
+    if (!id) return;
+    const slot = slots.find((candidate) => candidate.id === id);
+    if (!slot) return;
+    setCreatingSlot(false);
+    setSlotId(slot.id);
+    setSlotName(slot.name);
+    setSlotPrompt(slot.prompt);
+  };
+
+  const selectSample = (id: string | null) => {
+    if (!id) return;
+    const sample = samples.find((candidate) => candidate.id === id);
+    if (!sample) return;
+    setCreatingSample(false);
+    setSampleId(sample.id);
+    setSampleName(sample.name);
+    setSampleText(sample.text);
+  };
+
+  return (
+    <>
+      {error && <Alert variant="error">{error}</Alert>}
+      <SettingContainer
+        title={t("settings.transforms.slots.title")}
+        description={t("settings.transforms.slots.description")}
+        layout="stacked"
+        grouped
+      >
+        <div className="space-y-3">
+          <div className="flex min-w-0 gap-2">
+            <Dropdown
+              className="min-w-0 flex-1"
+              selectedValue={creatingSlot ? null : (selectedSlot?.id ?? null)}
+              options={slots.map((slot) => ({
+                value: slot.id,
+                label: slot.name,
+              }))}
+              onSelect={selectSlot}
+              placeholder={t("settings.transforms.slots.select")}
+              disabled={creatingSlot}
+            />
+            <Button
+              variant="primary"
+              onClick={() => {
+                setCreatingSlot(true);
+                setSlotName("");
+                setSlotPrompt("");
+              }}
+              disabled={creatingSlot || slots.length >= 8}
+            >
+              {t("settings.transforms.slots.add")}
+            </Button>
+          </div>
+          <Input
+            value={slotName}
+            onChange={(event) => setSlotName(event.target.value)}
+            placeholder={t("settings.transforms.slots.name")}
+            maxLength={60}
+          />
+          <Textarea
+            value={slotPrompt}
+            onChange={(event) => setSlotPrompt(event.target.value)}
+            placeholder={t("settings.transforms.slots.prompt")}
+            maxLength={1200}
+          />
+          {!creatingSlot && selectedSlot && (
+            <ShortcutInput shortcutId={selectedSlot.id} grouped />
+          )}
+          <p className="text-xs text-mid-gray">
+            {t("settings.transforms.slots.hint")}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="primary"
+              onClick={creatingSlot ? createSlot : saveSlot}
+              disabled={!slotName.trim() || !slotPrompt.trim()}
+            >
+              {creatingSlot
+                ? t("settings.transforms.slots.create")
+                : t("settings.transforms.slots.save")}
+            </Button>
+            {creatingSlot ? (
+              <Button
+                variant="secondary"
+                onClick={() => setCreatingSlot(false)}
+              >
+                {t("settings.transforms.cancel")}
+              </Button>
+            ) : (
+              <Button
+                variant="secondary"
+                onClick={deleteSlot}
+                disabled={slots.length <= 1}
+              >
+                {t("settings.transforms.slots.delete")}
+              </Button>
+            )}
+          </div>
+        </div>
+      </SettingContainer>
+
+      <SettingContainer
+        title={t("settings.transforms.samples.title")}
+        description={t("settings.transforms.samples.description")}
+        layout="stacked"
+        grouped
+      >
+        <div className="space-y-3">
+          <div className="flex min-w-0 gap-2">
+            <Dropdown
+              className="min-w-0 flex-1"
+              selectedValue={
+                creatingSample ? null : (selectedSample?.id ?? null)
+              }
+              options={samples.map((sample) => ({
+                value: sample.id,
+                label: sample.name,
+              }))}
+              onSelect={selectSample}
+              placeholder={t("settings.transforms.samples.select")}
+              disabled={creatingSample || samples.length === 0}
+            />
+            <Button
+              variant="primary"
+              onClick={() => {
+                setCreatingSample(true);
+                setSampleName("");
+                setSampleText("");
+              }}
+              disabled={creatingSample || samples.length >= 5}
+            >
+              {t("settings.transforms.samples.add")}
+            </Button>
+          </div>
+          {(creatingSample || selectedSample) && (
+            <>
+              <Input
+                value={sampleName}
+                onChange={(event) => setSampleName(event.target.value)}
+                placeholder={t("settings.transforms.samples.name")}
+                maxLength={60}
+              />
+              <Textarea
+                value={sampleText}
+                onChange={(event) => setSampleText(event.target.value)}
+                placeholder={t("settings.transforms.samples.text")}
+                maxLength={1000}
+              />
+              <div className="flex gap-2">
+                <Button
+                  variant="primary"
+                  onClick={creatingSample ? createSample : saveSample}
+                  disabled={!sampleName.trim() || !sampleText.trim()}
+                >
+                  {creatingSample
+                    ? t("settings.transforms.samples.create")
+                    : t("settings.transforms.samples.save")}
+                </Button>
+                {creatingSample ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => setCreatingSample(false)}
+                  >
+                    {t("settings.transforms.cancel")}
+                  </Button>
+                ) : (
+                  <Button variant="secondary" onClick={deleteSample}>
+                    {t("settings.transforms.samples.delete")}
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </SettingContainer>
+    </>
+  );
+};
+
 export const PostProcessingSettingsApi = React.memo(
   PostProcessingSettingsApiComponent,
 );
@@ -658,6 +948,10 @@ export const PostProcessingSettings: React.FC = () => {
 
       <SettingsGroup title={t("settings.postProcessing.cleanup.title")}>
         <CleanupAndStyles />
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.transforms.title")}>
+        <SelectedTextTransforms />
       </SettingsGroup>
 
       <SettingsGroup

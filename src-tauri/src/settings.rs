@@ -98,6 +98,21 @@ pub struct LLMPrompt {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Type)]
+pub struct TransformSlot {
+    /// Also identifies the global shortcut binding for this slot.
+    pub id: String,
+    pub name: String,
+    pub prompt: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Type)]
+pub struct WritingSample {
+    pub id: String,
+    pub name: String,
+    pub text: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Type)]
 pub struct PostProcessProvider {
     pub id: String,
     pub label: String,
@@ -526,6 +541,10 @@ pub struct AppSettings {
     pub post_process_selected_prompt_id: Option<String>,
     #[serde(default)]
     pub cleanup_level: CleanupLevel,
+    #[serde(default = "default_transform_slots")]
+    pub transform_slots: Vec<TransformSlot>,
+    #[serde(default)]
+    pub writing_samples: Vec<WritingSample>,
     #[serde(default)]
     pub local_transform_acceleration: TransformAcceleration,
     #[serde(default = "default_local_transform_timeout_seconds")]
@@ -577,7 +596,7 @@ fn default_model() -> String {
     "".to_string()
 }
 
-const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 5;
+const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 6;
 
 fn default_settings_schema_version() -> u32 {
     CURRENT_SETTINGS_SCHEMA_VERSION
@@ -803,6 +822,51 @@ fn default_post_process_prompts() -> Vec<LLMPrompt> {
     }]
 }
 
+pub fn default_transform_slots() -> Vec<TransformSlot> {
+    vec![
+        TransformSlot {
+            id: "transform_slot_polish".to_string(),
+            name: "Polish".to_string(),
+            prompt: "Rewrite the selected text for clarity and flow. Preserve its facts, names, numbers, code, language, and intent. Return only the rewritten text.".to_string(),
+        },
+        TransformSlot {
+            id: "transform_slot_shorten".to_string(),
+            name: "Shorten".to_string(),
+            prompt: "Make the selected text meaningfully shorter without dropping required facts, names, numbers, code, or commitments. Return only the shortened text.".to_string(),
+        },
+        TransformSlot {
+            id: "transform_slot_warm".to_string(),
+            name: "Warm tone".to_string(),
+            prompt: "Rewrite the selected text in a warm, direct, human tone. Preserve its meaning, facts, names, numbers, code, and language. Return only the rewritten text.".to_string(),
+        },
+    ]
+}
+
+fn default_transform_shortcuts() -> [&'static str; 3] {
+    #[cfg(target_os = "macos")]
+    {
+        ["option+shift+1", "option+shift+2", "option+shift+3"]
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        ["ctrl+alt+1", "ctrl+alt+2", "ctrl+alt+3"]
+    }
+}
+
+fn default_transform_bindings() -> Vec<ShortcutBinding> {
+    default_transform_slots()
+        .into_iter()
+        .zip(default_transform_shortcuts())
+        .map(|(slot, shortcut)| ShortcutBinding {
+            id: slot.id,
+            name: format!("Transform: {}", slot.name),
+            description: "Transforms the currently selected text with a local model.".to_string(),
+            default_binding: shortcut.to_string(),
+            current_binding: shortcut.to_string(),
+        })
+        .collect()
+}
+
 fn default_transcribe_gpu_device() -> i32 {
     -1 // auto
 }
@@ -931,6 +995,9 @@ pub fn get_default_settings() -> AppSettings {
             current_binding: "escape".to_string(),
         },
     );
+    for binding in default_transform_bindings() {
+        bindings.insert(binding.id.clone(), binding);
+    }
 
     AppSettings {
         settings_schema_version: default_settings_schema_version(),
@@ -978,6 +1045,8 @@ pub fn get_default_settings() -> AppSettings {
         post_process_prompts: default_post_process_prompts(),
         post_process_selected_prompt_id: None,
         cleanup_level: CleanupLevel::default(),
+        transform_slots: default_transform_slots(),
+        writing_samples: Vec::new(),
         local_transform_acceleration: TransformAcceleration::default(),
         local_transform_timeout_seconds: default_local_transform_timeout_seconds(),
         mute_while_recording: false,
@@ -1049,7 +1118,12 @@ impl AppSettings {
 /// one-time debug dump of the loaded settings.
 pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     let settings = get_settings(app);
-    debug!("Loaded settings: {:?}", settings);
+    debug!(
+        "Loaded settings schema {} with {} transform slot(s) and {} writing sample(s)",
+        settings.settings_schema_version,
+        settings.transform_slots.len(),
+        settings.writing_samples.len()
+    );
     settings
 }
 
@@ -1240,6 +1314,22 @@ fn apply_settings_migrations(
 
     if settings_value.get("cleanup_level").is_none() {
         settings.cleanup_level = CleanupLevel::Medium;
+        updated = true;
+    }
+
+    if settings_value.get("transform_slots").is_none() {
+        settings.transform_slots = default_transform_slots();
+        for binding in default_transform_bindings() {
+            settings
+                .bindings
+                .entry(binding.id.clone())
+                .or_insert(binding);
+        }
+        updated = true;
+    }
+
+    if settings_value.get("writing_samples").is_none() {
+        settings.writing_samples.clear();
         updated = true;
     }
 
@@ -1661,6 +1751,44 @@ mod tests {
     }
 
     #[test]
+    fn legacy_settings_receive_original_transform_slots_and_local_samples() {
+        let mut settings = get_default_settings();
+        settings.transform_slots.clear();
+        settings.writing_samples = vec![WritingSample {
+            id: "stale".into(),
+            name: "Stale".into(),
+            text: "must not survive a missing-field migration".into(),
+        }];
+        settings
+            .bindings
+            .retain(|id, _| !id.starts_with("transform_slot_"));
+        let raw = serde_json::json!({
+            "settings_schema_version": 5,
+            "onboarding_completed": false,
+            "onboarding_stage": "welcome",
+            "whats_new_last_seen_version": default_whats_new_last_seen_version(),
+            "overlay_style": "live",
+            "auto_submit_confirmed": false,
+            "app_context_enabled": false,
+            "app_context_profiles": default_app_context_profiles(),
+            "cleanup_level": "medium",
+            "local_transform_acceleration": "auto",
+            "local_transform_timeout_seconds": 30
+        });
+
+        assert!(apply_settings_migrations(&mut settings, &raw));
+        assert_eq!(settings.transform_slots, default_transform_slots());
+        assert!(settings.writing_samples.is_empty());
+        for slot in default_transform_slots() {
+            assert!(settings.bindings.contains_key(&slot.id));
+        }
+        assert_eq!(
+            settings.settings_schema_version,
+            CURRENT_SETTINGS_SCHEMA_VERSION
+        );
+    }
+
+    #[test]
     fn legacy_context_access_migrates_fail_closed() {
         let mut settings = get_default_settings();
         settings.app_context_enabled = true;
@@ -1795,6 +1923,8 @@ mod tests {
             "app_context_enabled": false,
             "app_context_profiles": default_app_context_profiles(),
             "cleanup_level": "medium",
+            "transform_slots": default_transform_slots(),
+            "writing_samples": [],
             "local_transform_acceleration": "auto",
             "local_transform_timeout_seconds": 30,
             "transcribe_accelerator": "gpu",

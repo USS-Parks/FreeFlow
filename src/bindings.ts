@@ -440,6 +440,177 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async startSelectedTransform(
+    slotId: string,
+  ): Promise<Result<SelectedTransformSession, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("start_selected_transform", { slotId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async getSelectedTransformSession(): Promise<
+    Result<SelectedTransformSession | null, string>
+  > {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("get_selected_transform_session"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async acceptSelectedTransform(
+    sessionId: string,
+  ): Promise<Result<SelectedTransformSession, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("accept_selected_transform", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async undoSelectedTransform(
+    sessionId: string,
+  ): Promise<Result<SelectedTransformSession, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("undo_selected_transform", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async retrySelectedTransform(
+    sessionId: string,
+  ): Promise<Result<SelectedTransformSession, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("retry_selected_transform", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async copySelectedTransform(
+    sessionId: string,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("copy_selected_transform", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async dismissSelectedTransform(
+    sessionId: string,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("dismiss_selected_transform", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async addTransformSlot(
+    name: string,
+    prompt: string,
+  ): Promise<Result<TransformSlot, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("add_transform_slot", { name, prompt }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async updateTransformSlot(
+    id: string,
+    name: string,
+    prompt: string,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("update_transform_slot", { id, name, prompt }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async deleteTransformSlot(id: string): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("delete_transform_slot", { id }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async addWritingSample(
+    name: string,
+    text: string,
+  ): Promise<Result<WritingSample, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("add_writing_sample", { name, text }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async updateWritingSample(
+    id: string,
+    name: string,
+    text: string,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("update_writing_sample", { id, name, text }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async deleteWritingSample(id: string): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("delete_writing_sample", { id }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async changePostProcessEnabledSetting(
     enabled: boolean,
   ): Promise<Result<null, string>> {
@@ -1718,13 +1889,6 @@ export const events = __makeEvents__<{
 /** user-defined types **/
 
 export type AppBoundaryStyle = "standard" | "compact" | "literal";
-export type CleanupLevel = "none" | "light" | "medium" | "high";
-export type FreeFlowStyle =
-  | "natural"
-  | "concise"
-  | "warm"
-  | "professional"
-  | "literal";
 export type AppCategory =
   | "email"
   | "messaging"
@@ -1735,7 +1899,7 @@ export type AppCategory =
 export type AppContextProfile = {
   category: AppCategory;
   boundary_style: AppBoundaryStyle;
-  freeflow_style: FreeFlowStyle;
+  freeflow_style?: FreeFlowStyle;
   surrounding_text_enabled: boolean;
   append_trailing_space: boolean;
 };
@@ -1807,6 +1971,8 @@ export type AppSettings = {
   post_process_prompts?: LLMPrompt[];
   post_process_selected_prompt_id?: string | null;
   cleanup_level?: CleanupLevel;
+  transform_slots?: TransformSlot[];
+  writing_samples?: WritingSample[];
   local_transform_acceleration?: TransformAcceleration;
   local_transform_timeout_seconds?: number;
   mute_while_recording?: boolean;
@@ -1846,6 +2012,7 @@ export type BindingResponse = {
   binding: ShortcutBinding | null;
   error: string | null;
 };
+export type CleanupLevel = "none" | "light" | "medium" | "high";
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard";
 export type ContextAccessStatus =
   | "enabled"
@@ -1888,6 +2055,7 @@ export type DictionaryEntry = {
   updated_at: number;
 };
 export type DictionarySort = "starred" | "updated" | "spoken_form";
+export type DiffKind = "equal" | "removed" | "added";
 export type EngineType =
   /**
    * Any GGML/GGUF model loaded through transcribe-cpp (Whisper, Parakeet,
@@ -1902,6 +2070,12 @@ export type EngineType =
   | "GigaAM"
   | "Canary"
   | "Cohere";
+export type FreeFlowStyle =
+  | "natural"
+  | "concise"
+  | "warm"
+  | "professional"
+  | "literal";
 export type GpuDeviceOption = {
   id: number;
   name: string;
@@ -2148,6 +2322,16 @@ export type RuntimeInstallPlan = {
   manifest_digest: string;
 };
 export type SecretMap = Partial<{ [key in string]: string }>;
+export type SelectedTransformSession = {
+  id: string;
+  slot_id: string;
+  slot_name: string;
+  source_text: string;
+  output_text: string;
+  diff: TransformDiffSegment[];
+  status: TransformSessionStatus;
+  error: string | null;
+};
 export type ShortcutBinding = {
   id: string;
   name: string;
@@ -2218,6 +2402,7 @@ export type TranscriptionProgressStage =
   | "completed"
   | "failed";
 export type TransformAcceleration = "auto" | "cpu" | "gpu";
+export type TransformDiffSegment = { kind: DiffKind; text: string };
 export type TransformResourceRecommendation = {
   logical_cpus: number;
   total_memory_bytes: number | null;
@@ -2225,6 +2410,21 @@ export type TransformResourceRecommendation = {
   recommended: boolean;
   available_accelerators: string[];
   message: string;
+};
+export type TransformSessionStatus =
+  | "processing"
+  | "preview"
+  | "applied"
+  | "undone"
+  | "unchanged"
+  | "failed";
+export type TransformSlot = {
+  /**
+   * Also identifies the global shortcut binding for this slot.
+   */
+  id: string;
+  name: string;
+  prompt: string;
 };
 export type TypingTool =
   | "auto"
@@ -2240,6 +2440,7 @@ export type WindowsMicrophonePermissionStatus = {
   app_access: PermissionAccess;
   desktop_app_access: PermissionAccess;
 };
+export type WritingSample = { id: string; name: string; text: string };
 
 /** tauri-specta globals **/
 

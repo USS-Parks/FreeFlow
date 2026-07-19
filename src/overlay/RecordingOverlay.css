@@ -399,3 +399,96 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Selected-text transform preview. The native window is focusable(false), so
+   these controls never steal the selection from the target application. */
+.transform-card {
+  width: 520px;
+  height: 300px;
+  padding: 18px;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 12px;
+}
+.transform-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.transform-header > div {
+  display: grid;
+  gap: 2px;
+}
+.transform-header strong {
+  font-size: 15px;
+  color: var(--color-text);
+}
+.transform-eyebrow {
+  color: var(--s-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.transform-diff {
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--s-hair);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-background) 84%, transparent);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  user-select: text;
+}
+.diff-removed {
+  color: #b42318;
+  background: color-mix(in srgb, #f04438 16%, transparent);
+  text-decoration: line-through;
+}
+.diff-added {
+  color: #027a48;
+  background: color-mix(in srgb, #12b76a 16%, transparent);
+}
+.transform-error,
+.transform-note {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  font-size: 12px;
+}
+.transform-error {
+  color: #b42318;
+  background: color-mix(in srgb, #f04438 12%, transparent);
+}
+.transform-note {
+  color: var(--s-muted);
+  background: var(--s-hair);
+}
+.transform-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.transform-action {
+  min-height: 30px;
+  padding: 0 12px;
+  border: 1px solid var(--s-hair);
+  border-radius: 8px;
+  color: var(--color-text);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.transform-action:hover {
+  background: var(--s-hair);
+}
+.transform-action.primary {
+  border-color: var(--s-accent);
+  color: white;
+  background: var(--s-accent);
+}

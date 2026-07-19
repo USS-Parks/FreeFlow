@@ -45,6 +45,13 @@ pub fn handle_shortcut_event(
         return;
     }
 
+    if binding_id.starts_with("transform_slot_") {
+        if is_pressed {
+            crate::selected_transform::start_from_shortcut(app.clone(), binding_id.to_string());
+        }
+        return;
+    }
+
     let Some(action) = ACTION_MAP.get(binding_id) else {
         warn!(
             "No action defined in ACTION_MAP for shortcut ID '{}'. Shortcut: '{}', Pressed: {}",

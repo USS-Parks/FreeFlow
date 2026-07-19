@@ -773,6 +773,36 @@
         "label": "Pokaż nowości",
         "description": "Pokazuj informacje o wydaniu po aktualizacjach FreeFlow"
       }
+    },
+    "transforms": {
+      "title": "Selected-text transforms",
+      "cancel": "Cancel",
+      "errors": {
+        "generic": "The transform setting could not be saved."
+      },
+      "slots": {
+        "title": "Transform slots",
+        "description": "Select text in another app, press a slot shortcut, review the local diff, then accept or dismiss it.",
+        "select": "Select a transform",
+        "add": "Add slot",
+        "name": "Transform name",
+        "prompt": "Original local transform instructions",
+        "hint": "Selections are limited to 1,000 words. Press the same shortcut again to accept a pending preview without leaving the target app.",
+        "create": "Create slot",
+        "save": "Save slot",
+        "delete": "Delete slot"
+      },
+      "samples": {
+        "title": "Local writing samples",
+        "description": "Optional tone examples stored only in FreeFlow's local settings. They are treated as untrusted examples, never as instructions.",
+        "select": "Select a writing sample",
+        "add": "Add sample",
+        "name": "Sample name",
+        "text": "Writing sample text",
+        "create": "Create sample",
+        "save": "Save sample",
+        "delete": "Delete sample"
+      }
     }
   },
   "footer": {
@@ -847,7 +877,24 @@
     "recording": "Recording",
     "success": "Done",
     "warning": "Needs attention",
-    "error": "Error"
+    "error": "Error",
+    "transform_processing": "Transforming selection...",
+    "transform_preview": "Transform preview",
+    "transform_applied": "Transform applied",
+    "transform_undone": "Transform undone",
+    "transform_unchanged": "No changes",
+    "transform_error": "Transform failed",
+    "transform": {
+      "title": "Selected-text transform",
+      "failed": "Transform unavailable",
+      "dismiss": "Dismiss transform",
+      "diff": "Changes to selected text",
+      "unchanged": "The local model returned the selected text unchanged.",
+      "accept": "Accept",
+      "undo": "Undo",
+      "retry": "Retry",
+      "copy": "Copy"
+    }
   },
   "whatsNew": {
     "title": "Nowości w FreeFlow v{{version}}"
