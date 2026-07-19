@@ -1127,9 +1127,10 @@ impl TranscriptionManager {
             .unwrap_or_else(|| settings.selected_model.clone());
         let effective_language =
             effective_language_for_model(&settings, self.model_manager.as_ref(), &model_id);
-        // Streaming models do not receive a decode prompt, so custom words
-        // always go through the shared fuzzy post-correction path.
+        // Streaming models do not receive a decode prompt. Legacy custom words
+        // and the SQLite dictionary therefore use their local correction paths.
         let filtered = post_process_transcription_text(raw.clone(), &settings, false);
+        let filtered = apply_dictionary_rules(&self.app_handle, filtered);
         let elapsed_secs = started_at.elapsed().as_secs_f64();
         let audio_secs = audio_len as f64 / 16_000.0;
         let outcome = TranscriptionOutcome {
@@ -1234,6 +1235,11 @@ impl TranscriptionManager {
         if let Some(requested_language) = requested_language {
             settings.selected_language = requested_language;
         }
+        let dictionary_prompt_terms = self
+            .app_handle
+            .try_state::<std::sync::Arc<crate::managers::dictionary::DictionaryManager>>()
+            .and_then(|manager| manager.prompt_terms().ok())
+            .unwrap_or_default();
 
         // Validate selected language against the model's supported languages.
         // If the language isn't supported, fall back to "auto" to prevent errors.
@@ -1257,17 +1263,11 @@ impl TranscriptionManager {
             );
         }
 
-        // Whether the loaded transcribe-cpp model advertises
-        // Feature::InitialPrompt. Informational (logged below); the whisper
-        // run extension and the fuzzy-correction skip are gated on
-        // `model_is_whisper` instead, since non-whisper archs can advertise
-        // the feature while rejecting the whisper-kind extension.
-        // Whether the loaded model is actually whisper-family (arch string).
-        // Non-whisper archs (e.g. Voxtral Small) can advertise
-        // Feature::InitialPrompt yet reject the whisper-kind run extension
-        // with INVALID_ARG, so the whisper extension must be gated on the
-        // arch, not on the feature (see #1601).
+        // The prompt extension requires both advertised support and a real
+        // whisper-family architecture. Some non-whisper architectures advertise
+        // Feature::InitialPrompt but reject WhisperRunOptions at runtime.
         let mut model_is_whisper = false;
+        let mut model_takes_initial_prompt = false;
 
         // Perform transcription with the appropriate engine.
         // We use catch_unwind to prevent engine panics from poisoning the mutex,
@@ -1300,7 +1300,7 @@ impl TranscriptionManager {
             if let LoadedEngine::TranscribeCpp(session) = &engine {
                 let model = session.model();
                 let caps = model.capabilities();
-                let model_takes_initial_prompt = model.supports(Feature::InitialPrompt);
+                model_takes_initial_prompt = model.supports(Feature::InitialPrompt);
                 model_is_whisper = model.arch() == "whisper";
                 model_supports_translate = caps.supports_translate;
                 model_languages = caps.languages;
@@ -1318,19 +1318,20 @@ impl TranscriptionManager {
                 catch_unwind(AssertUnwindSafe(|| -> Result<(String, Option<String>)> {
                     match &mut engine {
                         LoadedEngine::TranscribeCpp(session) => {
-                            // Custom words become the initial prompt ONLY for models
-                            // that accept one (whisper family). Attaching the
-                            // whisper run extension to a non-whisper arch is rejected
-                            // with INVALID_ARG, so skip it there and let the fuzzy
-                            // post-correction handle custom words instead.
-                            let family = if settings.custom_words.is_empty() || !model_is_whisper {
-                                None
-                            } else {
-                                Some(RunExtension::Whisper(WhisperRunOptions {
-                                    initial_prompt: Some(settings.custom_words.join(", ")),
+                            // Dictionary vocabulary becomes an initial prompt only
+                            // for a whisper-family model that advertises support.
+                            // Every engine still receives deterministic local rules.
+                            let family = dictionary_initial_prompt(
+                                &dictionary_prompt_terms,
+                                model_is_whisper,
+                                model_takes_initial_prompt,
+                            )
+                            .map(|initial_prompt| {
+                                RunExtension::Whisper(WhisperRunOptions {
+                                    initial_prompt: Some(initial_prompt),
                                     ..Default::default()
-                                }))
-                            };
+                                })
+                            });
 
                             let run_plan = transcribe_cpp_run_plan(
                                 settings.translate_to_english,
@@ -1490,14 +1491,15 @@ impl TranscriptionManager {
             }
         };
 
-        // Apply fuzzy word correction if custom words are configured — UNLESS the
-        // words were already handed to the model as an initial prompt (whisper
-        // family). We don't pass a prompt to non-whisper models (it requires the
-        // whisper-kind run extension), so they still get fuzzy correction here,
-        // same as the ONNX engines.
+        // Preserve the legacy fuzzy custom-word path for upgraded settings.
+        // SQLite dictionary replacements run after it for every engine.
         let (raw_result, detected_language) = result;
-        let filtered_result =
-            post_process_transcription_text(raw_result.clone(), &settings, model_is_whisper);
+        let filtered_result = post_process_transcription_text(
+            raw_result.clone(),
+            &settings,
+            model_is_whisper && model_takes_initial_prompt && !dictionary_prompt_terms.is_empty(),
+        );
+        let filtered_result = apply_dictionary_rules(&self.app_handle, filtered_result);
 
         let et = std::time::Instant::now();
         let translation_note = if settings.translate_to_english {
@@ -1734,6 +1736,27 @@ fn post_process_transcription_text(
         &settings.app_language,
         &settings.custom_filler_words,
     )
+}
+
+fn dictionary_initial_prompt(
+    terms: &[String],
+    model_is_whisper: bool,
+    model_takes_initial_prompt: bool,
+) -> Option<String> {
+    if terms.is_empty() || !model_is_whisper || !model_takes_initial_prompt {
+        None
+    } else {
+        Some(terms.join(", "))
+    }
+}
+
+fn apply_dictionary_rules(app: &AppHandle, text: String) -> String {
+    app.try_state::<std::sync::Arc<crate::managers::dictionary::DictionaryManager>>()
+        .map_or(Ok(text.clone()), |manager| manager.apply(&text))
+        .unwrap_or_else(|error| {
+            log::error!("Failed to apply dictionary rules: {error}");
+            text
+        })
 }
 
 /// Decide a transcribe-cpp run's task + translation target from settings.
@@ -2042,6 +2065,18 @@ mod tests {
         assert!(matches!(plan.task, Task::Transcribe));
         assert_eq!(plan.language.as_deref(), Some("es"));
         assert_eq!(plan.target_language, None);
+    }
+
+    #[test]
+    fn dictionary_prompt_is_used_only_for_supported_whisper_engines() {
+        let terms = vec!["FreeFlow".to_string(), "Basho Parks".to_string()];
+        assert_eq!(
+            dictionary_initial_prompt(&terms, true, true).as_deref(),
+            Some("FreeFlow, Basho Parks")
+        );
+        assert_eq!(dictionary_initial_prompt(&terms, true, false), None);
+        assert_eq!(dictionary_initial_prompt(&terms, false, true), None);
+        assert_eq!(dictionary_initial_prompt(&[], true, true), None);
     }
 }
 

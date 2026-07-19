@@ -33,6 +33,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 
 use env_filter::Builder as EnvFilterBuilder;
 use managers::audio::AudioRecordingManager;
+use managers::dictionary::DictionaryManager;
 use managers::history::HistoryManager;
 use managers::model::ModelManager;
 use managers::transcription::TranscriptionManager;
@@ -172,6 +173,9 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     );
     let history_manager =
         Arc::new(HistoryManager::new(app_handle).expect("Failed to initialize history manager"));
+    let dictionary_manager = Arc::new(
+        DictionaryManager::new(app_handle).expect("Failed to initialize dictionary manager"),
+    );
 
     // Initialize the transcribe-cpp native backend (logging + backend module
     // registration) once, before any whisper model is loaded.
@@ -185,6 +189,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
+    app_handle.manage(dictionary_manager.clone());
     app_handle.manage(clipboard::InsertionState::new());
     app_handle.manage(tray::CurrentTrayIconState::new());
 
@@ -1008,6 +1013,13 @@ pub fn run(cli_args: CliArgs) {
             commands::transcription::set_model_unload_timeout,
             commands::transcription::get_model_load_status,
             commands::transcription::unload_model_manually,
+            commands::dictionary::get_dictionary_entries,
+            commands::dictionary::create_dictionary_entry,
+            commands::dictionary::update_dictionary_entry,
+            commands::dictionary::delete_dictionary_entry,
+            commands::dictionary::export_dictionary_csv,
+            commands::dictionary::import_dictionary_csv,
+            commands::dictionary::get_dictionary_engine_support,
             commands::history::get_history_entries,
             commands::history::toggle_history_entry_saved,
             commands::history::get_audio_file_path,

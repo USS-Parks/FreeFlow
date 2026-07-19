@@ -1223,6 +1223,96 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async getDictionaryEntries(
+    query: string | null,
+    sort: DictionarySort | null,
+  ): Promise<Result<DictionaryEntry[], string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("get_dictionary_entries", { query, sort }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async createDictionaryEntry(
+    spokenForm: string,
+    replacement: string,
+    starred: boolean,
+  ): Promise<Result<DictionaryEntry, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("create_dictionary_entry", {
+          spokenForm,
+          replacement,
+          starred,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async updateDictionaryEntry(
+    id: number,
+    spokenForm: string,
+    replacement: string,
+    starred: boolean,
+  ): Promise<Result<DictionaryEntry, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("update_dictionary_entry", {
+          id,
+          spokenForm,
+          replacement,
+          starred,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async deleteDictionaryEntry(id: number): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("delete_dictionary_entry", { id }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async exportDictionaryCsv(): Promise<Result<string, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("export_dictionary_csv"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async importDictionaryCsv(csv: string): Promise<Result<number, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("import_dictionary_csv", { csv }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async getDictionaryEngineSupport(): Promise<DictionaryEngineSupport> {
+    return await TAURI_INVOKE("get_dictionary_engine_support");
+  },
   async getHistoryEntries(
     cursor: number | null,
     limit: number | null,
@@ -1288,10 +1378,7 @@ export const commands = {
   },
   async clearHistory(): Promise<Result<number, string>> {
     try {
-      return {
-        status: "ok",
-        data: await TAURI_INVOKE("clear_history"),
-      };
+      return { status: "ok", data: await TAURI_INVOKE("clear_history") };
     } catch (e) {
       if (e instanceof Error) throw e;
       else return { status: "error", error: e as any };
@@ -1497,6 +1584,19 @@ export type DictationStateEvent = {
   sequence: number;
   feedback_latency_ms: number | null;
 };
+export type DictionaryEngineSupport = {
+  whisper_initial_prompt_only: boolean;
+  deterministic_replacement: boolean;
+};
+export type DictionaryEntry = {
+  id: number;
+  spoken_form: string;
+  replacement: string;
+  starred: boolean;
+  created_at: number;
+  updated_at: number;
+};
+export type DictionarySort = "starred" | "updated" | "spoken_form";
 export type EngineType =
   /**
    * Any GGML/GGUF model loaded through transcribe-cpp (Whisper, Parakeet,
@@ -1538,13 +1638,13 @@ export type HistoryEntry = {
   application_id: string | null;
   window_title: string | null;
 };
+export type HistoryStorageMode = "store" | "never_store";
 export type HistoryUpdatePayload =
   | { action: "added"; entry: HistoryEntry }
   | { action: "updated"; entry: HistoryEntry }
   | { action: "deleted"; id: number }
   | { action: "cleared" }
   | { action: "toggled"; id: number };
-export type HistoryStorageMode = "store" | "never_store";
 /**
  * Result of changing keyboard implementation
  */

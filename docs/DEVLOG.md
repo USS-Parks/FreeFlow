@@ -271,6 +271,39 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Deviations or remaining work: none in FF-P1 implementation scope. The
   retained cross-platform interactive release matrices remain owned by FF-R2.
 
+### 2026-07-19 — FF-P2 (candidate)
+
+- Objective: replace the legacy custom-word array with a durable local
+  dictionary supporting vocabulary/replacement CRUD, starring, search/sort,
+  deterministic precedence, atomic CSV transfer, and truthful ASR integration.
+- Starting commit: `bc9dd283cd7c878f8bc15b02b309e0e94b8b6203` on canonical
+  `main`.
+- Reuse classification: extension at the existing SQLite migration, Tauri
+  manager/command/binding, transcription capability, settings migration, and
+  i18next seams; no new runtime dependency.
+- Files changed: personalization migration and dictionary manager; typed
+  commands and generated bindings; batch/streaming transcription integration;
+  dictionary settings UI; 23 locale catalogs; behavior matrix; frozen FF-P2
+  evidence.
+- Verification commands: verified Bun 1.3.14 frozen install; ESLint and service
+  boundary; Prettier and Rustfmt; 481-key translation consistency; TypeScript
+  and production Vite build; full Rust tests; warnings-denied Clippy with only
+  the seven inherited lint classes allowed; optimized Tauri no-bundle build;
+  RustSec; provenance; diff checks.
+- Automated evidence: 182/182 runnable Rust library tests pass with the two
+  explicit 731 MB live-model tests ignored. Focused Unicode, case, boundary,
+  precedence, duplicate, size, CSV rollback/round-trip, legacy migration,
+  reversible schema, and engine-support tests pass. RustSec reports no denied
+  vulnerability and 28 allowed upstream warnings. All catalogs are complete.
+- Artifact: 44,329,984-byte `freeflow.exe`, SHA-256
+  `dbce3160391bf8ed1ea0c06ce8b7bf20b29a3167da4f29edd0834f61adb829b0`.
+- Hosted evidence: pending at the exact candidate commit.
+- Result: local FF-P2 implementation and gates pass; hosted candidate evidence
+  is the remaining closeout step.
+- Commit SHA: pending candidate commit.
+- Deviations or remaining work: none in FF-P2 implementation scope. The
+  retained cross-platform interactive release matrices remain owned by FF-R2.
+
 ## Entry template
 
 ### YYYY-MM-DD — FF-XX

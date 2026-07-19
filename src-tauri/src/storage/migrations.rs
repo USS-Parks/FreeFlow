@@ -78,6 +78,25 @@ pub const HISTORY_MIGRATIONS: &[ReversibleMigration] = &[
     },
 ];
 
+pub const PERSONALIZATION_MIGRATIONS: &[ReversibleMigration] = &[ReversibleMigration {
+    version: 1,
+    up_sql: "CREATE TABLE dictionary_entries (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        spoken_form TEXT NOT NULL,
+        replacement TEXT NOT NULL,
+        starred BOOLEAN NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+    );
+    CREATE UNIQUE INDEX dictionary_spoken_form_unique
+        ON dictionary_entries(lower(spoken_form));
+    CREATE INDEX dictionary_starred_updated_idx
+        ON dictionary_entries(starred DESC, updated_at DESC);",
+    down_sql: "DROP INDEX IF EXISTS dictionary_starred_updated_idx;
+        DROP INDEX IF EXISTS dictionary_spoken_form_unique;
+        DROP TABLE IF EXISTS dictionary_entries;",
+}];
+
 pub struct MigrationRunner<'a> {
     migrations: &'a [ReversibleMigration],
 }
@@ -300,5 +319,34 @@ mod tests {
             .expect("read migrated row");
         assert_eq!(raw, "raw words");
         assert_eq!(status, "completed");
+    }
+
+    #[test]
+    fn personalization_migration_is_reversible() {
+        let runner = MigrationRunner::new(PERSONALIZATION_MIGRATIONS)
+            .expect("valid personalization migrations");
+        let mut connection = Connection::open_in_memory().expect("open database");
+        runner
+            .migrate_to_latest(&mut connection)
+            .expect("migrate forward");
+        connection
+            .execute(
+                "INSERT INTO dictionary_entries
+                 (spoken_form, replacement, starred, created_at, updated_at)
+                 VALUES ('free flow', 'FreeFlow', 1, 1, 1)",
+                [],
+            )
+            .expect("insert dictionary row");
+        assert_eq!(MigrationRunner::current_version(&connection).unwrap(), 1);
+        runner.migrate_to(&mut connection, 0).expect("roll back");
+        assert_eq!(MigrationRunner::current_version(&connection).unwrap(), 0);
+        let table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='dictionary_entries'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(table_count, 0);
     }
 }
