@@ -26,6 +26,17 @@ not substitute for this matrix.
   character count, and insertion timestamp as undo metadata. The metadata must
   not duplicate transcript content.
 
+## Hosted structural evidence
+
+GitHub Actions run
+[`29675125703`](https://github.com/USS-Parks/FreeFlow/actions/runs/29675125703)
+passed at ledger commit `7d0d3cb3c64587d874e5e50050a2534573749cef`.
+The Windows and macOS foundation jobs both passed their frontend gates and Rust
+tests; provenance and RustSec also passed. This proves native compilation and
+automated tests for the candidate on both operating systems. The hosted runners
+were not interactive application sessions, so this evidence does not satisfy or
+reduce the live matrices below.
+
 ## Windows matrix — 100 normal attempts
 
 Run ten independently authored payload classes against each target: short
