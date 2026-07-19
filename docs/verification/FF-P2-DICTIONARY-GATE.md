@@ -69,5 +69,7 @@ RustSec reports no denied vulnerability and 28 allowed upstream warnings.
 
 The optimized Windows executable is 44,329,984 bytes with SHA-256
 `dbce3160391bf8ed1ea0c06ce8b7bf20b29a3167da4f29edd0834f61adb829b0`.
-Hosted native Windows/macOS, provenance, and security evidence will be attached
-to this record at the exact candidate commit before FF-P2 is closed.
+Hosted CI run
+[`29694672120`](https://github.com/USS-Parks/FreeFlow/actions/runs/29694672120)
+passed native Windows and macOS foundation jobs, provenance, and security at
+exact candidate commit `fc66b424fbe33826f77f3587d751714cad04ed6e`.

@@ -271,7 +271,7 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Deviations or remaining work: none in FF-P1 implementation scope. The
   retained cross-platform interactive release matrices remain owned by FF-R2.
 
-### 2026-07-19 — FF-P2 (candidate)
+### 2026-07-19 — FF-P2 (complete)
 
 - Objective: replace the legacy custom-word array with a durable local
   dictionary supporting vocabulary/replacement CRUD, starring, search/sort,
@@ -297,10 +297,10 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   vulnerability and 28 allowed upstream warnings. All catalogs are complete.
 - Artifact: 44,329,984-byte `freeflow.exe`, SHA-256
   `dbce3160391bf8ed1ea0c06ce8b7bf20b29a3167da4f29edd0834f61adb829b0`.
-- Hosted evidence: pending at the exact candidate commit.
-- Result: local FF-P2 implementation and gates pass; hosted candidate evidence
-  is the remaining closeout step.
-- Commit SHA: pending candidate commit.
+- Hosted evidence: run `29694672120` passed native Windows and macOS
+  foundation jobs, provenance, and security at the exact candidate commit.
+- Result: FF-P2 is complete and FF-P3 is next.
+- Commit SHA: `fc66b424fbe33826f77f3587d751714cad04ed6e`.
 - Deviations or remaining work: none in FF-P2 implementation scope. The
   retained cross-platform interactive release matrices remain owned by FF-R2.
 
