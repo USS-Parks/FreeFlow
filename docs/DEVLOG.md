@@ -100,7 +100,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 - Implementation: add a manifest-consent-bound headless local-model installer; add a same-process numeric TCP denial probe to corpus results; reproduce the exact hashed LibriSpeech subset; run the production evaluator under a Windows program-scoped outbound firewall rule or macOS network-denying sandbox; retain host, executable, install, isolation, stderr, and JSON evidence as workflow artifacts.
 - Local verification: 153/153 ordinary Rust tests passed with 2 live-model tests ignored; warnings-denied FF-V3 clippy delta passed with the seven documented inherited lint classes allowed; ESLint, service-boundary, 22-catalog translation, TypeScript, Vite production build, Prettier, Rustfmt, PowerShell/Bash syntax, Actionlint/ShellCheck with the previously proven hosted Intel runner label allowlisted, provenance, and diff checks passed. The corpus preparation script reproduced all 20 WAV inputs from the retained hash-verified archive.
 - Result: pending hosted run.
-- Commit SHA: pending.
+- Commit SHA: `a6c8adb2c40f6d594cbc6e5f13f53d6941b1c7a4`.
 - Remaining work: FF-V3 cannot close and FF-V4 cannot begin until the hosted matrix passes and its retained artifacts are reviewed and committed.
 
 ## Entry template
