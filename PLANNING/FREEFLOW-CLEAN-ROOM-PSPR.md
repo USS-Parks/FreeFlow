@@ -1,8 +1,8 @@
 # FreeFlow Local Dictation Clean-Room PSPR
 
-Status: **Approved — STS active; FF-G1 through FF-G4, FF-V1, and FF-V3 complete; FF-V2 user-deferred; FF-V4 in progress**
-Version: 1.3
-Date: 2026-07-18
+Status: **Approved — STS active; FF-G1 through FF-G4 and FF-V1 through FF-V4 implementation slices complete; FF-V2 and FF-V4 live matrices retained for FF-R2; FF-V5 in progress**
+Version: 1.4
+Date: 2026-07-19
 Canonical repository: `C:\Users\17076\Documents\FreeFlow`
 Canonical remote: `https://github.com/USS-Parks/FreeFlow` (public; empty at plan-draft time)
 Authoritative behavior ledger: `docs/product/BEHAVIOR-PARITY-MATRIX.md`
@@ -166,7 +166,11 @@ Gate: Public-corpus results and latency/memory measurements are recorded for the
 
 Objective: Implement active-target capture, direct insertion, clipboard-preserving fallback, manual-copy fallback, whitespace/capitalization boundary handling, paste-last, and safe undo metadata.
 
-Gate: Representative application matrix reaches at least 98% success; clipboard content survives all fallback paths; password/secure fields are not captured; live Windows and macOS evidence passes.
+Gate: Automated target-binding, clipboard-preservation, secure-field, boundary,
+recovery, and content-free undo invariants pass; native Windows and macOS builds
+and tests pass. By explicit 2026-07-19 user rescope, the representative live
+application matrices and their 98% threshold remain mandatory at FF-R2 rather
+than blocking FF-V5.
 
 #### FF-V5 — Tray, original FreeFlow status bar, and recovery UX
 
@@ -282,7 +286,7 @@ Gate: no undisclosed traffic or sensitive logging; high-severity findings are fi
 
 #### FF-R2 — Reliability, performance, and accessibility matrix
 
-Objective: Run the full hardware/OS/app/model corpus, stress, sleep/wake, device-change, multi-monitor, scaling, upgrade, and accessibility suite.
+Objective: Run the full hardware/OS/app/model corpus, stress, sleep/wake, device-change, multi-monitor, scaling, upgrade, and accessibility suite, including the retained FF-V2 microphone matrix and FF-V4 cross-application insertion matrices.
 
 Gate: all quantitative release gates pass or a user-approved, documented support re-scope updates the behavior matrix before release.
 

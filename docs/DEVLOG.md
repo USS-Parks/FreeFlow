@@ -154,6 +154,23 @@ src-tauri/Cargo.toml`; ESLint over `src`; service-boundary checker; Prettier;
   retain exact platform evidence, and only then close FF-V4. FF-V5 has not
   started.
 
+### 2026-07-19 — FF-V4 implementation closeout and retained live gate (complete)
+
+- Objective: Close the verified FF-V4 implementation slice without weakening
+  its live acceptance criteria, then continue STS at FF-V5.
+- Starting commit: `6159e5a6d0f02bc99b7f6d1b828b6e2fe1f4bc55` on canonical `main`.
+- Authorized rescope: after directing completion to proceed stem-to-stern, the
+  user explicitly required FF-V4 to stop blocking the remaining roster. The
+  frozen 100-attempt Windows and macOS matrices therefore move intact to FF-R2;
+  the 98% thresholds and security/clipboard invariants are not waived.
+- Verification evidence: candidate `5877aacea9aa2e9cb2be832cf5df2f77c981a2fb`
+  passed 159/159 runnable Rust library tests with two live-model tests ignored,
+  the frontend/service-boundary/translation gates, Windows no-bundle release
+  build, and hosted native Windows/macOS/provenance/security run `29675125703`.
+- Result: FF-V4 implementation slice complete. The retained live insertion
+  matrix is an explicit FF-R2 release blocker. FF-V5 is next.
+- Commit SHA: recorded by the closeout commit containing this entry.
+
 ## Entry template
 
 ### YYYY-MM-DD — FF-XX

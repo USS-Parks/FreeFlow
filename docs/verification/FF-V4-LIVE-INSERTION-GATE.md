@@ -1,6 +1,6 @@
 # FF-V4 live cross-application insertion gate
 
-Status: **In progress — implementation candidate verified headlessly; live Windows and macOS matrices pending**
+Status: **Retained release gate — implementation slice closed by explicit 2026-07-19 rescope; live Windows and macOS matrices remain mandatory at FF-R2**
 
 This gate freezes the evidence required by FF-V4 before interactive results are
 observed. Unit tests, mocks, compilation, and hosted non-interactive runners do
@@ -106,6 +106,9 @@ not count as failed delivery when the expected result is a safe refusal.
 
 ## Completion rule
 
-FF-V4 passes only when retained Windows and macOS evidence satisfies every
-invariant above and each platform reaches at least 98/100 normal deliveries.
-Until then, FF-V4 remains in progress and FF-V5 must not begin.
+The FF-V4 implementation slice closed after its automated invariants and native
+Windows/macOS structural gates passed. By explicit user direction on
+2026-07-19, the retained Windows and macOS evidence above moves intact to FF-R2
+instead of blocking FF-V5. Release still requires every invariant above and at
+least 98/100 normal deliveries on each platform; no headless result substitutes
+for that evidence.
