@@ -668,17 +668,31 @@ pub fn change_start_hidden_setting(app: AppHandle, enabled: bool) -> Result<(), 
 #[tauri::command]
 #[specta::specta]
 pub fn change_autostart_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    // Apply the OS integration first. A failed registry/login-item update must
+    // not leave settings claiming launch-at-login is enabled when it is not.
+    let autostart_manager = app.autolaunch();
+    if enabled {
+        autostart_manager
+            .enable()
+            .map_err(|error| format!("Failed to enable launch at login: {error}"))?;
+    } else {
+        autostart_manager
+            .disable()
+            .map_err(|error| format!("Failed to disable launch at login: {error}"))?;
+    }
+
+    let actual = autostart_manager
+        .is_enabled()
+        .map_err(|error| format!("Failed to verify launch-at-login state: {error}"))?;
+    if actual != enabled {
+        return Err(
+            "Operating system did not retain the requested launch-at-login state".to_string(),
+        );
+    }
+
     let mut settings = settings::get_settings(&app);
     settings.autostart_enabled = enabled;
     settings::write_settings(&app, settings);
-
-    // Apply the autostart setting immediately
-    let autostart_manager = app.autolaunch();
-    if enabled {
-        let _ = autostart_manager.enable();
-    } else {
-        let _ = autostart_manager.disable();
-    }
 
     // Notify frontend
     let _ = app.emit(

@@ -106,7 +106,9 @@
       }
     },
     "errors": {
-      "selectModel": "Impossibile selezionare il modello"
+      "selectModel": "Impossibile selezionare il modello",
+      "saveProgress": "Could not save setup progress",
+      "complete": "Could not finish setup"
     },
     "permissions": {
       "title": "Permessi Richiesti",
@@ -127,6 +129,39 @@
         "checkFailed": "Impossibile verificare i permessi. Riprova.",
         "requestFailed": "Impossibile richiedere il permesso. Riprova."
       }
+    },
+    "welcome": {
+      "title": "Private dictation, on your computer",
+      "description": "FreeFlow turns speech into text without an account or a transcription cloud.",
+      "local": "Your recordings, transcripts, settings, and model inference stay on this device.",
+      "noAccount": "No account, telemetry, or background upload is required.",
+      "network": "FreeFlow only uses the network when you explicitly approve a model download or configure optional post-processing.",
+      "continue": "Set up FreeFlow"
+    },
+    "preferences": {
+      "title": "Make FreeFlow yours",
+      "description": "Choose the shortcut you will use for dictation and whether FreeFlow starts when you sign in.",
+      "diagnosticsTitle": "Setup diagnostics",
+      "diagnosticsDescription": "Verify the selected model and the operating system launch-at-login state.",
+      "refreshDiagnostics": "Refresh setup diagnostics",
+      "model": "Local model",
+      "autostart": "Launch at login",
+      "openData": "Open FreeFlow data folder",
+      "uninstallData": "Uninstalling keeps this folder by default on macOS. Delete it after quitting FreeFlow for a complete data removal. The Windows uninstaller offers the same keep-or-delete choice.",
+      "continue": "Try your first dictation",
+      "microphone": "Microphone permission",
+      "accessibility": "Accessibility permission",
+      "repairPermissions": "Repair permissions"
+    },
+    "firstDictation": {
+      "title": "Try your first dictation",
+      "description": "Place the cursor below, press {{shortcut}}, speak a short sentence, then press the shortcut again.",
+      "testArea": "First dictation test area",
+      "placeholder": "Your first local transcript will appear here...",
+      "failed": "That dictation did not complete. Check the message above and try again.",
+      "successTitle": "Your local dictation works",
+      "successDescription": "FreeFlow recorded, transcribed, and inserted text using the selected local model.",
+      "finish": "Finish setup"
     }
   },
   "modelSelector": {
@@ -612,7 +647,11 @@
     "open": "Apri",
     "copy": "Copia",
     "clear": "Svuota",
-    "noOptionsFound": "Nessuna opzione trovata"
+    "noOptionsFound": "Nessuna opzione trovata",
+    "ready": "Ready",
+    "needsAttention": "Needs attention",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
   },
   "accessibility": {
     "permissionsDescription": "FreeFlow ha bisogno dei permessi di accessibilità per digitare il testo trascritto.",

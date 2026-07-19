@@ -11,15 +11,26 @@ import { ModelStateEvent, RecordingErrorEvent } from "./lib/types/events";
 import "./App.css";
 import AccessibilityPermissions from "./components/AccessibilityPermissions";
 import Footer from "./components/footer";
-import Onboarding, { AccessibilityOnboarding } from "./components/onboarding";
+import Onboarding, {
+  AccessibilityOnboarding,
+  FirstDictationOnboarding,
+  PreferencesOnboarding,
+  WelcomeOnboarding,
+} from "./components/onboarding";
 import { Sidebar, SidebarSection, SECTIONS_CONFIG } from "./components/Sidebar";
 import { WhatsNewGate } from "./components/whats-new";
 import { useSettings } from "./hooks/useSettings";
 import { useSettingsStore } from "./stores/settingsStore";
-import { commands } from "@/bindings";
+import { commands, type OnboardingStage } from "@/bindings";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
 
-type OnboardingStep = "accessibility" | "model" | "done";
+type OnboardingStep =
+  | "welcome"
+  | "permissions"
+  | "model"
+  | "preferences"
+  | "first_dictation"
+  | "done";
 
 type ManualInsertionEvent = {
   reason: string;
@@ -39,9 +50,10 @@ function App() {
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep | null>(
     null,
   );
-  // Track if this is a returning user who just needs to grant permissions
-  // (vs a new user who needs full onboarding including model selection)
-  const [isReturningUser, setIsReturningUser] = useState(false);
+  // Permission repair is an interrupt: after re-granting, return to the exact
+  // persisted setup step (or the main app for an established user).
+  const [permissionReturnStep, setPermissionReturnStep] =
+    useState<OnboardingStep | null>(null);
   const [currentSection, setCurrentSection] =
     useState<SidebarSection>("general");
   const { settings, updateSetting } = useSettings();
@@ -244,11 +256,22 @@ function App() {
         settingsResult.status === "ok" &&
         settingsResult.data.onboarding_completed === true;
       const currentPlatform = platform();
+      const storedStage =
+        settingsResult.status === "ok"
+          ? settingsResult.data.onboarding_stage
+          : "welcome";
+      const intendedStep: OnboardingStep = hasCompletedOnboarding
+        ? "done"
+        : storedStage === "complete"
+          ? "done"
+          : (storedStage ?? "welcome");
+      const shouldCheckPermissions =
+        intendedStep === "done" ||
+        intendedStep === "model" ||
+        intendedStep === "preferences" ||
+        intendedStep === "first_dictation";
 
-      if (hasCompletedOnboarding) {
-        // Returning user - check if they need to grant permissions first
-        setIsReturningUser(true);
-
+      if (shouldCheckPermissions) {
         if (currentPlatform === "macos") {
           try {
             const [hasAccessibility, hasMicrophone] = await Promise.all([
@@ -257,7 +280,8 @@ function App() {
             ]);
             if (!hasAccessibility || !hasMicrophone) {
               await revealMainWindowForPermissions();
-              setOnboardingStep("accessibility");
+              setPermissionReturnStep(intendedStep);
+              setOnboardingStep("permissions");
               return;
             }
           } catch (e) {
@@ -275,7 +299,8 @@ function App() {
               microphoneStatus.overall_access === "denied"
             ) {
               await revealMainWindowForPermissions();
-              setOnboardingStep("accessibility");
+              setPermissionReturnStep(intendedStep);
+              setOnboardingStep("permissions");
               return;
             }
           } catch (e) {
@@ -283,27 +308,50 @@ function App() {
             // If we can't check, proceed to main app and let them fix it there
           }
         }
-
-        setOnboardingStep("done");
-      } else {
-        // New user - start full onboarding
-        setIsReturningUser(false);
-        setOnboardingStep("accessibility");
       }
+      setOnboardingStep(intendedStep);
     } catch (error) {
       console.error("Failed to check onboarding status:", error);
-      setOnboardingStep("accessibility");
+      setOnboardingStep("welcome");
     }
   };
 
-  const handleAccessibilityComplete = () => {
-    // Returning users already have models, skip to main app
-    // New users need to select a model
-    setOnboardingStep(isReturningUser ? "done" : "model");
+  const advanceOnboarding = async (
+    stage: Exclude<OnboardingStage, "complete">,
+    step: OnboardingStep,
+  ) => {
+    const result = await commands.setOnboardingStage(stage);
+    if (result.status === "error") {
+      toast.error(t("onboarding.errors.saveProgress"), {
+        description: result.error,
+      });
+      return;
+    }
+    setOnboardingStep(step);
   };
 
-  const handleModelSelected = () => {
-    // Transition to main app - user has started a download
+  const handleAccessibilityComplete = async () => {
+    if (permissionReturnStep) {
+      setOnboardingStep(permissionReturnStep);
+      setPermissionReturnStep(null);
+      return;
+    }
+    await advanceOnboarding("model", "model");
+  };
+
+  const handleModelSelected = async () => {
+    await advanceOnboarding("preferences", "preferences");
+  };
+
+  const handleOnboardingComplete = async () => {
+    const result = await commands.completeOnboarding();
+    if (result.status === "error") {
+      toast.error(t("onboarding.errors.complete"), {
+        description: result.error,
+      });
+      return;
+    }
+    await useSettingsStore.getState().refreshSettings();
     setOnboardingStep("done");
   };
 
@@ -336,12 +384,30 @@ function App() {
   // stable wrapper around this node, so crossing between onboarding steps and
   // the main app never remounts it (which would drop any in-flight toast).
   let content: ReactNode;
-  if (onboardingStep === "accessibility") {
+  if (onboardingStep === "welcome") {
+    content = (
+      <WelcomeOnboarding
+        onContinue={() => advanceOnboarding("permissions", "permissions")}
+      />
+    );
+  } else if (onboardingStep === "permissions") {
     content = (
       <AccessibilityOnboarding onComplete={handleAccessibilityComplete} />
     );
   } else if (onboardingStep === "model") {
     content = <Onboarding onModelSelected={handleModelSelected} />;
+  } else if (onboardingStep === "preferences") {
+    content = (
+      <PreferencesOnboarding
+        onContinue={() =>
+          advanceOnboarding("first_dictation", "first_dictation")
+        }
+      />
+    );
+  } else if (onboardingStep === "first_dictation") {
+    content = (
+      <FirstDictationOnboarding onComplete={handleOnboardingComplete} />
+    );
   } else {
     content = (
       <div

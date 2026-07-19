@@ -164,13 +164,11 @@ pub fn switch_active_model(app: &AppHandle, model_id: &str) -> Result<(), String
     let settings = get_settings(app);
     let unload_timeout = settings.model_unload_timeout;
     let old_model = settings.selected_model.clone();
-    let old_onboarding_completed = settings.onboarding_completed;
 
     // Persist the new selection early so the frontend sees the correct model
     // when it reacts to events emitted by load_model.
     let mut settings = settings;
-    settings.selected_model = model_id.to_string();
-    settings.onboarding_completed = true;
+    apply_model_selection(&mut settings, model_id);
 
     write_settings(app, settings);
 
@@ -199,12 +197,47 @@ pub fn switch_active_model(app: &AppHandle, model_id: &str) -> Result<(), String
     if let Err(e) = transcription_manager.load_model(model_id) {
         let mut settings = get_settings(app);
         settings.selected_model = old_model;
-        settings.onboarding_completed = old_onboarding_completed;
         write_settings(app, settings);
         return Err(e.to_string());
     }
 
     Ok(())
+}
+
+fn apply_model_selection(settings: &mut crate::settings::AppSettings, model_id: &str) {
+    // Model selection is also available after setup. It must never mutate the
+    // wizard's durable checkpoint or compatibility completion flag.
+    settings.selected_model = model_id.to_string();
+}
+
+#[cfg(test)]
+mod onboarding_selection_tests {
+    use super::*;
+    use crate::settings::{get_default_settings, OnboardingStage};
+
+    #[test]
+    fn model_selection_does_not_complete_or_advance_onboarding() {
+        let mut settings = get_default_settings();
+        settings.onboarding_stage = OnboardingStage::Model;
+
+        apply_model_selection(&mut settings, "local-model");
+
+        assert_eq!(settings.selected_model, "local-model");
+        assert!(!settings.onboarding_completed);
+        assert_eq!(settings.onboarding_stage, OnboardingStage::Model);
+    }
+
+    #[test]
+    fn established_user_model_switch_preserves_completion() {
+        let mut settings = get_default_settings();
+        settings.onboarding_completed = true;
+        settings.onboarding_stage = OnboardingStage::Complete;
+
+        apply_model_selection(&mut settings, "replacement-model");
+
+        assert!(settings.onboarding_completed);
+        assert_eq!(settings.onboarding_stage, OnboardingStage::Complete);
+    }
 }
 
 #[tauri::command]

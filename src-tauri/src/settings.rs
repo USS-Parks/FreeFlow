@@ -294,6 +294,21 @@ pub enum TranscribeAcceleratorSetting {
     Gpu,
 }
 
+/// Durable checkpoint for the resumable first-run wizard. The separate
+/// `onboarding_completed` flag is retained for backwards compatibility and for
+/// fast startup checks; these values are migrated together.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum OnboardingStage {
+    #[default]
+    Welcome,
+    Permissions,
+    Model,
+    Preferences,
+    FirstDictation,
+    Complete,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum OrtAcceleratorSetting {
@@ -378,6 +393,8 @@ pub struct AppSettings {
     pub selected_model: String,
     #[serde(default)]
     pub onboarding_completed: bool,
+    #[serde(default)]
+    pub onboarding_stage: OnboardingStage,
     #[serde(default = "default_always_on_microphone")]
     pub always_on_microphone: bool,
     #[serde(default)]
@@ -866,6 +883,7 @@ pub fn get_default_settings() -> AppSettings {
         whats_new_last_seen_version: default_whats_new_last_seen_version(),
         selected_model: "".to_string(),
         onboarding_completed: false,
+        onboarding_stage: OnboardingStage::Welcome,
         always_on_microphone: false,
         selected_microphone: None,
         clamshell_microphone: None,
@@ -1076,6 +1094,18 @@ fn apply_settings_migrations(
         updated = true;
     }
 
+    // Stores created before the resumable wizard only had a completion bit.
+    // Completed users must never be sent back through first-run setup after an
+    // upgrade; incomplete users restart at the local/privacy promise.
+    if settings_value.get("onboarding_stage").is_none() {
+        settings.onboarding_stage = if settings.onboarding_completed {
+            OnboardingStage::Complete
+        } else {
+            OnboardingStage::Welcome
+        };
+        updated = true;
+    }
+
     // One-time What's New migration: migrations only run on an existing store
     // (fresh installs stamp the current version via get_default_settings). A
     // missing key here means a user upgrading from before it existed — blank it
@@ -1099,6 +1129,10 @@ fn apply_settings_migrations(
             settings.transcribe_accelerator = TranscribeAcceleratorSetting::Auto;
             settings.transcribe_gpu_device = default_transcribe_gpu_device();
         }
+        updated = true;
+    }
+
+    if stored_schema_version < u64::from(CURRENT_SETTINGS_SCHEMA_VERSION) {
         settings.settings_schema_version = CURRENT_SETTINGS_SCHEMA_VERSION;
         updated = true;
     }
@@ -1230,6 +1264,7 @@ mod tests {
             "whats_new_last_seen_version": "0.9.0",
             "selected_model": "whisper-large-v3-turbo",
             "onboarding_completed": true,
+            "onboarding_stage": "complete",
             "always_on_microphone": false,
             "selected_microphone": "MacBook Pro Microphone",
             "clamshell_microphone": null,
@@ -1488,6 +1523,7 @@ mod tests {
         let raw = serde_json::json!({
             "settings_schema_version": CURRENT_SETTINGS_SCHEMA_VERSION,
             "onboarding_completed": false,
+            "onboarding_stage": "welcome",
             "whats_new_last_seen_version": default_whats_new_last_seen_version(),
             "overlay_style": "live",
             "transcribe_accelerator": "gpu",
@@ -1500,6 +1536,44 @@ mod tests {
             TranscribeAcceleratorSetting::Gpu
         );
         assert_eq!(settings.transcribe_gpu_device, 2);
+    }
+
+    #[test]
+    fn onboarding_stage_migration_preserves_completed_upgrade() {
+        let mut settings = get_default_settings();
+        settings.onboarding_completed = true;
+        let raw = serde_json::json!({
+            "settings_schema_version": 1,
+            "selected_model": "parakeet-tdt-0.6b-v3",
+            "onboarding_completed": true,
+            "whats_new_last_seen_version": "0.1.0",
+            "overlay_style": "live"
+        });
+
+        assert!(apply_settings_migrations(&mut settings, &raw));
+        assert!(settings.onboarding_completed);
+        assert_eq!(settings.onboarding_stage, OnboardingStage::Complete);
+        assert_eq!(
+            settings.settings_schema_version,
+            CURRENT_SETTINGS_SCHEMA_VERSION
+        );
+    }
+
+    #[test]
+    fn onboarding_stage_migration_resumes_incomplete_upgrade_at_welcome() {
+        let mut settings = get_default_settings();
+        settings.onboarding_stage = OnboardingStage::FirstDictation;
+        let raw = serde_json::json!({
+            "settings_schema_version": 1,
+            "selected_model": "",
+            "onboarding_completed": false,
+            "whats_new_last_seen_version": "0.1.0",
+            "overlay_style": "live"
+        });
+
+        assert!(apply_settings_migrations(&mut settings, &raw));
+        assert!(!settings.onboarding_completed);
+        assert_eq!(settings.onboarding_stage, OnboardingStage::Welcome);
     }
 
     #[test]

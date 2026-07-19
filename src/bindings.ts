@@ -791,6 +791,40 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async setOnboardingStage(
+    stage: OnboardingStage,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("set_onboarding_stage", { stage }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async completeOnboarding(): Promise<Result<null, string>> {
+    try {
+      return { status: "ok", data: await TAURI_INVOKE("complete_onboarding") };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async getOnboardingDiagnostics(): Promise<
+    Result<OnboardingDiagnostics, string>
+  > {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("get_onboarding_diagnostics"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async getLogDirPath(): Promise<Result<string, string>> {
     try {
       return { status: "ok", data: await TAURI_INVOKE("get_log_dir_path") };
@@ -1356,6 +1390,7 @@ export type AppSettings = {
   whats_new_last_seen_version?: string;
   selected_model?: string;
   onboarding_completed?: boolean;
+  onboarding_stage?: OnboardingStage;
   always_on_microphone?: boolean;
   selected_microphone?: string | null;
   clamshell_microphone?: string | null;
@@ -1599,6 +1634,27 @@ export type ModelUnloadTimeout =
   | "min_15"
   | "hour_1"
   | "sec_15";
+export type OnboardingDiagnostics = {
+  stage: OnboardingStage;
+  completed: boolean;
+  model_selected: boolean;
+  autostart_requested: boolean;
+  autostart_enabled: boolean;
+  app_data_path: string;
+  portable: boolean;
+};
+/**
+ * Durable checkpoint for the resumable first-run wizard. The separate
+ * `onboarding_completed` flag is retained for backwards compatibility and for
+ * fast startup checks; these values are migrated together.
+ */
+export type OnboardingStage =
+  | "welcome"
+  | "permissions"
+  | "model"
+  | "preferences"
+  | "first_dictation"
+  | "complete";
 export type OrtAcceleratorSetting =
   | "auto"
   | "cpu"
@@ -1676,6 +1732,16 @@ export type StreamPhaseEvent = {
  * volatile suffix the model may still rewrite.
  */
 export type StreamTextEvent = { committed: string; tentative: string };
+/**
+ * Semantic kind of "working" phase, used to localize the spinner label.
+ */
+export type StreamWorkKind = "transcribing" | "polishing";
+/**
+ * UI appearance mode. `System` follows the OS `prefers-color-scheme`; `Light`
+ * and `Dark` force one of the two palettes FreeFlow ships.
+ */
+export type Theme = "system" | "light" | "dark";
+export type TranscribeAcceleratorSetting = "auto" | "cpu" | "gpu";
 export type TranscriptionProgressEvent = {
   history_id: number | null;
   stage: TranscriptionProgressStage;
@@ -1688,16 +1754,6 @@ export type TranscriptionProgressStage =
   | "post_processing"
   | "completed"
   | "failed";
-/**
- * Semantic kind of "working" phase, used to localize the spinner label.
- */
-export type StreamWorkKind = "transcribing" | "polishing";
-/**
- * UI appearance mode. `System` follows the OS `prefers-color-scheme`; `Light`
- * and `Dark` force one of the two palettes FreeFlow ships.
- */
-export type Theme = "system" | "light" | "dark";
-export type TranscribeAcceleratorSetting = "auto" | "cpu" | "gpu";
 export type TypingTool =
   | "auto"
   | "wtype"

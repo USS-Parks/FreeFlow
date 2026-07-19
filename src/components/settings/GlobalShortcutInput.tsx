@@ -34,7 +34,7 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
     null,
   );
   const [originalBinding, setOriginalBinding] = useState<string>("");
-  const shortcutRefs = useRef<Map<string, HTMLDivElement | null>>(new Map());
+  const shortcutRefs = useRef<Map<string, HTMLButtonElement | null>>(new Map());
   const osType = useOsType();
 
   const bindings = getSetting("bindings") || {};
@@ -200,7 +200,7 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
   };
 
   // Store references to shortcut elements
-  const setShortcutRef = (id: string, ref: HTMLDivElement | null) => {
+  const setShortcutRef = (id: string, ref: HTMLButtonElement | null) => {
     shortcutRefs.current.set(id, ref);
   };
 
@@ -273,19 +273,23 @@ export const GlobalShortcutInput: React.FC<GlobalShortcutInputProps> = ({
     >
       <div className="flex items-center space-x-1">
         {editingShortcutId === shortcutId ? (
-          <div
+          <button
+            type="button"
             ref={(ref) => setShortcutRef(shortcutId, ref)}
             className="px-2 py-1 text-sm font-semibold border border-logo-primary bg-logo-primary/30 rounded-md"
+            aria-label={t("settings.general.shortcut.pressKeys")}
           >
             {formatCurrentKeys()}
-          </div>
+          </button>
         ) : (
-          <div
+          <button
+            type="button"
             className="px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 hover:bg-logo-primary/10 rounded-md cursor-pointer hover:border-logo-primary"
             onClick={() => startRecording(shortcutId)}
+            aria-label={`${translatedName}: ${formatKeyCombination(binding.current_binding, osType)}`}
           >
             {formatKeyCombination(binding.current_binding, osType)}
-          </div>
+          </button>
         )}
         <ResetButton
           onClick={() => resetBinding(shortcutId)}
