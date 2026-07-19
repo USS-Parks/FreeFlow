@@ -307,7 +307,45 @@ pub fn resident_memory_bytes() -> Option<u64> {
     Some(counters.WorkingSetSize as u64)
 }
 
-#[cfg(unix)]
+#[cfg(target_os = "macos")]
+pub fn resident_memory_bytes() -> Option<u64> {
+    use mach2::kern_return::KERN_SUCCESS;
+    use mach2::task::task_info;
+    use mach2::task_info::{task_info_t, MACH_TASK_BASIC_INFO};
+    use mach2::time_value::time_value_t;
+    use mach2::traps::mach_task_self;
+    use mach2::vm_types::{integer_t, mach_vm_size_t, natural_t};
+    use std::mem::size_of;
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct MachTaskBasicInfo {
+        virtual_size: mach_vm_size_t,
+        resident_size: mach_vm_size_t,
+        resident_size_max: mach_vm_size_t,
+        user_time: time_value_t,
+        system_time: time_value_t,
+        policy: natural_t,
+        suspend_count: integer_t,
+    }
+
+    let mut info = MachTaskBasicInfo::default();
+    let mut count = (size_of::<MachTaskBasicInfo>() / size_of::<integer_t>()) as u32;
+    // SAFETY: mach_task_self() is a valid send right for this process. `info`
+    // has the layout of mach_task_basic_info and `count` reports its capacity
+    // in the integer_t units required by task_info.
+    let result = unsafe {
+        task_info(
+            mach_task_self(),
+            MACH_TASK_BASIC_INFO,
+            (&mut info as *mut MachTaskBasicInfo).cast::<integer_t>() as task_info_t,
+            &mut count,
+        )
+    };
+    (result == KERN_SUCCESS).then_some(info.resident_size)
+}
+
+#[cfg(all(unix, not(target_os = "macos")))]
 pub fn resident_memory_bytes() -> Option<u64> {
     let output = std::process::Command::new("ps")
         .args(["-o", "rss=", "-p", &std::process::id().to_string()])

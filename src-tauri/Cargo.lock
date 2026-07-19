@@ -1923,6 +1923,7 @@ dependencies = [
  "hf-hub",
  "hound",
  "log",
+ "mach2",
  "natural",
  "once_cell",
  "rdev",
