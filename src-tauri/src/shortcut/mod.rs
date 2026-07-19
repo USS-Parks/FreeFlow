@@ -908,6 +908,74 @@ pub fn confirm_auto_submit(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 #[specta::specta]
+pub fn change_app_context_enabled_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.app_context_enabled = enabled;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_app_context_denylist_setting(
+    app: AppHandle,
+    denylist: Vec<String>,
+) -> Result<(), String> {
+    if denylist.len() > 100 {
+        return Err("The application denylist is limited to 100 entries".into());
+    }
+    let mut normalized = Vec::with_capacity(denylist.len());
+    for entry in denylist {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        if entry.chars().count() > 260 {
+            return Err("A denylist application identifier exceeds 260 characters".into());
+        }
+        if !normalized
+            .iter()
+            .any(|existing: &String| existing.eq_ignore_ascii_case(entry))
+        {
+            normalized.push(entry.to_string());
+        }
+    }
+    let mut settings = settings::get_settings(&app);
+    settings.app_context_denylist = normalized;
+    settings::write_settings(&app, settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_app_context_profiles_setting(
+    app: AppHandle,
+    profiles: Vec<settings::AppContextProfile>,
+) -> Result<(), String> {
+    use std::collections::HashSet;
+
+    if profiles.len() != settings::default_app_context_profiles().len() {
+        return Err("Every application category must have exactly one profile".into());
+    }
+    let categories: HashSet<_> = profiles.iter().map(|profile| profile.category).collect();
+    if categories.len() != profiles.len() {
+        return Err("Application profile categories must be unique".into());
+    }
+    let required: HashSet<_> = settings::default_app_context_profiles()
+        .into_iter()
+        .map(|profile| profile.category)
+        .collect();
+    if categories != required {
+        return Err("Application profiles are missing a required category".into());
+    }
+    let mut app_settings = settings::get_settings(&app);
+    app_settings.app_context_profiles = profiles;
+    settings::write_settings(&app, app_settings);
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn change_auto_submit_key_setting(app: AppHandle, key: String) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     let parsed = match key.as_str() {

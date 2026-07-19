@@ -299,7 +299,8 @@
         "output": "פלט",
         "transcription": "תמלול",
         "history": "היסטוריה",
-        "experimental": "ניסיוני"
+        "experimental": "ניסיוני",
+        "context": "Application context"
       },
       "experimentalToggle": {
         "label": "תכונות ניסיוניות",
@@ -467,6 +468,55 @@
         "edit": "Edit",
         "delete": "Delete",
         "deleteConfirm": "Delete this voice snippet?"
+      },
+      "appContext": {
+        "enabled": {
+          "title": "Use surrounding text",
+          "description": "Opt in to reading at most 16 characters before the cursor for allowed application categories. Text stays local and is never read from secure, denied, remote, or unknown targets."
+        },
+        "denylist": {
+          "title": "Application denylist",
+          "description": "One exact process identifier per line. Matching applications never expose surrounding text.",
+          "placeholder": "secret-app.exe"
+        },
+        "profiles": {
+          "title": "Category profiles",
+          "description": "Choose deterministic boundary formatting and whether each local application category may use surrounding text.",
+          "context": "Context",
+          "trailingSpace": "Trailing space"
+        },
+        "categories": {
+          "email": "Email",
+          "messaging": "Messaging",
+          "document": "Document",
+          "code": "Code",
+          "terminal": "Terminal",
+          "other": "Other"
+        },
+        "styles": {
+          "standard": "Standard",
+          "compact": "Compact",
+          "literal": "Literal"
+        },
+        "diagnostics": {
+          "title": "Context diagnostics",
+          "description": "Inspect the active target's local classification and access decision without displaying surrounding text.",
+          "application": "Application",
+          "category": "Category",
+          "status": "Access",
+          "characters": "Characters read",
+          "empty": "No diagnostic snapshot yet.",
+          "inspect": "Inspect active app"
+        },
+        "status": {
+          "enabled": "Enabled",
+          "disabled": "Globally disabled",
+          "profile_disabled": "Disabled by category profile",
+          "denied_application": "Blocked by denylist",
+          "remote_application": "Blocked for remote application",
+          "secure_field": "Blocked for secure field",
+          "security_unknown": "Blocked because field security is unknown"
+        }
       }
     },
     "postProcessing": {
@@ -709,7 +759,8 @@
     "ready": "Ready",
     "needsAttention": "Needs attention",
     "enabled": "Enabled",
-    "disabled": "Disabled"
+    "disabled": "Disabled",
+    "unknown": "Unknown"
   },
   "accessibility": {
     "permissionsDescription": "FreeFlow צריך הרשאות נגישות כדי להקליד את הטקסט המתומלל.",

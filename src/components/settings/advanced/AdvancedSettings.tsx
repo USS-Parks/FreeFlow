@@ -22,6 +22,7 @@ import { VoiceActivityDetection } from "../VoiceActivityDetection";
 import { AccelerationSelector } from "../AccelerationSelector";
 import { LazyStreamClose } from "../LazyStreamClose";
 import { VoiceSnippets } from "../VoiceSnippets";
+import { AppContextSettings } from "../AppContextSettings";
 
 export const AdvancedSettings: React.FC = () => {
   const { t } = useTranslation();
@@ -51,6 +52,10 @@ export const AdvancedSettings: React.FC = () => {
         <CustomWords descriptionMode="tooltip" grouped />
         <VoiceSnippets descriptionMode="tooltip" grouped />
         <AppendTrailingSpace descriptionMode="tooltip" grouped={true} />
+      </SettingsGroup>
+
+      <SettingsGroup title={t("settings.advanced.groups.context")}>
+        <AppContextSettings />
       </SettingsGroup>
 
       <SettingsGroup title={t("settings.advanced.groups.history")}>

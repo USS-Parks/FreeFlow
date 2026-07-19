@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import type {
   AppSettings as Settings,
   AudioDevice,
+  AppContextProfile,
   TranscribeAcceleratorSetting,
   OrtAcceleratorSetting,
 } from "@/bindings";
@@ -134,6 +135,12 @@ const settingUpdaters: {
   auto_submit: (value) => commands.changeAutoSubmitSetting(value as boolean),
   auto_submit_key: (value) =>
     commands.changeAutoSubmitKeySetting(value as string),
+  app_context_enabled: (value) =>
+    commands.changeAppContextEnabledSetting(value as boolean),
+  app_context_denylist: (value) =>
+    commands.changeAppContextDenylistSetting(value as string[]),
+  app_context_profiles: (value) =>
+    commands.changeAppContextProfilesSetting(value as AppContextProfile[]),
   history_limit: (value) => commands.updateHistoryLimit(value as number),
   post_process_enabled: (value) =>
     commands.changePostProcessEnabledSetting(value as boolean),

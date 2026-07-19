@@ -1,9 +1,11 @@
 use crate::contracts::{InsertionMethod, InsertionOutcome, PlatformContext, UndoMetadata};
 use crate::input::{self, EnigoState};
-use crate::platform_context::{capture_active_target, same_target};
+use crate::platform_context::{capture_active_target, profile_for_application, same_target};
 #[cfg(target_os = "linux")]
 use crate::settings::TypingTool;
-use crate::settings::{get_settings, AutoSubmitKey, ClipboardHandling, PasteMethod};
+use crate::settings::{
+    get_settings, AppBoundaryStyle, AutoSubmitKey, ClipboardHandling, PasteMethod,
+};
 use enigo::{Direction, Enigo, Key, Keyboard};
 use log::{info, warn};
 use serde::Serialize;
@@ -773,6 +775,7 @@ fn prepare_text_for_boundary(
     text: &str,
     preceding_text: Option<&str>,
     append_trailing_space: bool,
+    boundary_style: AppBoundaryStyle,
 ) -> String {
     let mut prepared = text.trim().to_string();
     if prepared.is_empty() {
@@ -788,7 +791,7 @@ fn prepare_text_for_boundary(
         let sentence_boundary = semantic
             .map(|character| matches!(character, '.' | '!' | '?' | '\n' | '\r'))
             .unwrap_or(true);
-        if !sentence_boundary {
+        if !sentence_boundary && boundary_style != AppBoundaryStyle::Literal {
             prepared = lower_sentence_initial(&prepared);
         }
         if immediate.is_some_and(|character| !character.is_whitespace())
@@ -801,7 +804,7 @@ fn prepare_text_for_boundary(
         }
     }
 
-    if append_trailing_space {
+    if append_trailing_space && boundary_style != AppBoundaryStyle::Compact {
         prepared.push(' ');
     }
     prepared
@@ -920,13 +923,15 @@ pub fn paste(
     let paste_delay_ms = settings.paste_delay_ms;
     let paste_delay_after_ms = settings.paste_delay_after_ms;
 
-    let current_target = capture_active_target();
+    let current_target = capture_active_target(&settings);
     let captured_target = captured_target.unwrap_or_else(|| current_target.clone());
     let block_reason = insertion_block_reason(&captured_target, &current_target);
+    let profile = profile_for_application(&settings, current_target.application_id.as_deref());
     let text = prepare_text_for_boundary(
         &text,
         current_target.preceding_text.as_deref(),
-        settings.append_trailing_space,
+        settings.append_trailing_space || profile.append_trailing_space,
+        profile.boundary_style,
     );
     let should_submit = should_send_auto_submit(
         settings.auto_submit,
@@ -1202,20 +1207,48 @@ mod tests {
     #[test]
     fn boundary_formatting_handles_spacing_case_and_sentence_starts() {
         assert_eq!(
-            prepare_text_for_boundary(" Hello ", Some("existing "), false),
+            prepare_text_for_boundary(
+                " Hello ",
+                Some("existing "),
+                false,
+                AppBoundaryStyle::Standard,
+            ),
             "hello"
         );
         assert_eq!(
-            prepare_text_for_boundary("Hello", Some("existing"), false),
+            prepare_text_for_boundary("Hello", Some("existing"), false, AppBoundaryStyle::Standard,),
             " hello"
         );
         assert_eq!(
-            prepare_text_for_boundary("Hello", Some("Finished. "), false),
+            prepare_text_for_boundary(
+                "Hello",
+                Some("Finished. "),
+                false,
+                AppBoundaryStyle::Standard,
+            ),
             "Hello"
         );
         assert_eq!(
-            prepare_text_for_boundary("NASA works", Some("existing "), true),
+            prepare_text_for_boundary(
+                "NASA works",
+                Some("existing "),
+                true,
+                AppBoundaryStyle::Standard,
+            ),
             "NASA works "
+        );
+        assert_eq!(
+            prepare_text_for_boundary(
+                "CamelCase stays",
+                Some("existing "),
+                false,
+                AppBoundaryStyle::Literal,
+            ),
+            "CamelCase stays"
+        );
+        assert_eq!(
+            prepare_text_for_boundary("Hello", Some("existing "), true, AppBoundaryStyle::Compact,),
+            "hello"
         );
     }
 

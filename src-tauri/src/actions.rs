@@ -536,7 +536,8 @@ impl ShortcutAction for TranscribeAction {
     ) {
         let start_time = Instant::now();
         debug!("TranscribeAction::start called for binding: {}", binding_id);
-        let target = crate::platform_context::capture_active_target();
+        let settings = get_settings(app);
+        let target = crate::platform_context::capture_active_target(&settings);
         if let Ok(mut targets) = self.targets.lock() {
             targets.insert(binding_id.to_string(), target);
         }
@@ -563,7 +564,6 @@ impl ShortcutAction for TranscribeAction {
 
         // Get the microphone mode to determine audio feedback timing
         let plan_started = Instant::now();
-        let settings = get_settings(app);
         let is_always_on = settings.always_on_microphone;
 
         let selected_model_info = app

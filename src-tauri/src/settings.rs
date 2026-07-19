@@ -177,6 +177,33 @@ pub enum AutoSubmitKey {
     CmdEnter,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum AppCategory {
+    Email,
+    Messaging,
+    Document,
+    Code,
+    Terminal,
+    Other,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum AppBoundaryStyle {
+    Standard,
+    Compact,
+    Literal,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Type)]
+pub struct AppContextProfile {
+    pub category: AppCategory,
+    pub boundary_style: AppBoundaryStyle,
+    pub surrounding_text_enabled: bool,
+    pub append_trailing_space: bool,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum RecordingRetentionPeriod {
@@ -443,6 +470,12 @@ pub struct AppSettings {
     pub auto_submit_confirmed: bool,
     #[serde(default)]
     pub auto_submit_key: AutoSubmitKey,
+    #[serde(default)]
+    pub app_context_enabled: bool,
+    #[serde(default)]
+    pub app_context_denylist: Vec<String>,
+    #[serde(default = "default_app_context_profiles")]
+    pub app_context_profiles: Vec<AppContextProfile>,
     #[serde(default = "default_post_process_enabled")]
     pub post_process_enabled: bool,
     #[serde(default = "default_post_process_provider_id")]
@@ -504,10 +537,54 @@ fn default_model() -> String {
     "".to_string()
 }
 
-const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 2;
+const CURRENT_SETTINGS_SCHEMA_VERSION: u32 = 3;
 
 fn default_settings_schema_version() -> u32 {
     CURRENT_SETTINGS_SCHEMA_VERSION
+}
+
+pub fn default_app_context_profiles() -> Vec<AppContextProfile> {
+    use AppBoundaryStyle::{Compact, Literal, Standard};
+    use AppCategory::{Code, Document, Email, Messaging, Other, Terminal};
+
+    vec![
+        AppContextProfile {
+            category: Email,
+            boundary_style: Standard,
+            surrounding_text_enabled: true,
+            append_trailing_space: false,
+        },
+        AppContextProfile {
+            category: Messaging,
+            boundary_style: Compact,
+            surrounding_text_enabled: true,
+            append_trailing_space: false,
+        },
+        AppContextProfile {
+            category: Document,
+            boundary_style: Standard,
+            surrounding_text_enabled: true,
+            append_trailing_space: false,
+        },
+        AppContextProfile {
+            category: Code,
+            boundary_style: Literal,
+            surrounding_text_enabled: false,
+            append_trailing_space: false,
+        },
+        AppContextProfile {
+            category: Terminal,
+            boundary_style: Literal,
+            surrounding_text_enabled: false,
+            append_trailing_space: false,
+        },
+        AppContextProfile {
+            category: Other,
+            boundary_style: Standard,
+            surrounding_text_enabled: true,
+            append_trailing_space: false,
+        },
+    ]
 }
 
 fn default_push_to_talk() -> bool {
@@ -916,6 +993,9 @@ pub fn get_default_settings() -> AppSettings {
         auto_submit: default_auto_submit(),
         auto_submit_confirmed: false,
         auto_submit_key: AutoSubmitKey::default(),
+        app_context_enabled: false,
+        app_context_denylist: Vec::new(),
+        app_context_profiles: default_app_context_profiles(),
         post_process_enabled: default_post_process_enabled(),
         post_process_provider_id: default_post_process_provider_id(),
         post_process_providers: default_post_process_providers(),
@@ -952,6 +1032,19 @@ impl Default for AppSettings {
 }
 
 impl AppSettings {
+    pub fn app_context_profile(&self, category: AppCategory) -> AppContextProfile {
+        self.app_context_profiles
+            .iter()
+            .find(|profile| profile.category == category)
+            .cloned()
+            .or_else(|| {
+                default_app_context_profiles()
+                    .into_iter()
+                    .find(|profile| profile.category == category)
+            })
+            .expect("every application category has a default profile")
+    }
+
     pub fn active_post_process_provider(&self) -> Option<&PostProcessProvider> {
         self.post_process_providers
             .iter()
@@ -1136,6 +1229,16 @@ fn apply_settings_migrations(
     if settings_value.get("auto_submit_confirmed").is_none() {
         settings.auto_submit = false;
         settings.auto_submit_confirmed = false;
+        updated = true;
+    }
+
+    // Surrounding-text access did not have an explicit consent control before
+    // FF-P5. Existing stores therefore migrate to the same fail-closed default
+    // as fresh installs, regardless of any former insertion settings.
+    if settings_value.get("app_context_enabled").is_none() {
+        settings.app_context_enabled = false;
+        settings.app_context_denylist.clear();
+        settings.app_context_profiles = default_app_context_profiles();
         updated = true;
     }
 
@@ -1474,6 +1577,43 @@ mod tests {
     }
 
     #[test]
+    fn surrounding_context_is_off_by_default_with_complete_profiles() {
+        let settings = get_default_settings();
+        assert!(!settings.app_context_enabled);
+        assert!(settings.app_context_denylist.is_empty());
+        assert_eq!(settings.app_context_profiles.len(), 6);
+        let categories: std::collections::HashSet<_> = settings
+            .app_context_profiles
+            .iter()
+            .map(|profile| profile.category)
+            .collect();
+        assert_eq!(categories.len(), 6);
+    }
+
+    #[test]
+    fn legacy_context_access_migrates_fail_closed() {
+        let mut settings = get_default_settings();
+        settings.app_context_enabled = true;
+        settings.app_context_denylist = vec!["keep-secret.exe".into()];
+        let raw = serde_json::json!({
+            "settings_schema_version": 2,
+            "onboarding_completed": false,
+            "onboarding_stage": "welcome",
+            "whats_new_last_seen_version": default_whats_new_last_seen_version(),
+            "overlay_style": "live",
+            "auto_submit_confirmed": false
+        });
+
+        assert!(apply_settings_migrations(&mut settings, &raw));
+        assert!(!settings.app_context_enabled);
+        assert!(settings.app_context_denylist.is_empty());
+        assert_eq!(
+            settings.settings_schema_version,
+            CURRENT_SETTINGS_SCHEMA_VERSION
+        );
+    }
+
+    #[test]
     fn legacy_auto_submit_is_disabled_until_first_use_confirmation() {
         let mut settings = get_default_settings();
         settings.auto_submit = true;
@@ -1582,6 +1722,7 @@ mod tests {
             "whats_new_last_seen_version": default_whats_new_last_seen_version(),
             "overlay_style": "live",
             "auto_submit_confirmed": false,
+            "app_context_enabled": false,
             "transcribe_accelerator": "gpu",
             "transcribe_gpu_device": 2
         });

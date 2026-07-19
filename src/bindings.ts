@@ -329,6 +329,54 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async changeAppContextEnabledSetting(
+    enabled: boolean,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("change_app_context_enabled_setting", {
+          enabled,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async changeAppContextDenylistSetting(
+    denylist: string[],
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("change_app_context_denylist_setting", {
+          denylist,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async changeAppContextProfilesSetting(
+    profiles: AppContextProfile[],
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("change_app_context_profiles_setting", {
+          profiles,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async getContextDiagnostics(): Promise<ContextDiagnostics> {
+    return await TAURI_INVOKE("get_context_diagnostics");
+  },
   async changePostProcessEnabledSetting(
     enabled: boolean,
   ): Promise<Result<null, string>> {
@@ -1562,6 +1610,20 @@ export const events = __makeEvents__<{
 
 /** user-defined types **/
 
+export type AppBoundaryStyle = "standard" | "compact" | "literal";
+export type AppCategory =
+  | "email"
+  | "messaging"
+  | "document"
+  | "code"
+  | "terminal"
+  | "other";
+export type AppContextProfile = {
+  category: AppCategory;
+  boundary_style: AppBoundaryStyle;
+  surrounding_text_enabled: boolean;
+  append_trailing_space: boolean;
+};
 /**
  * The container-level `serde(default)` (backed by the `Default` impl below)
  * guarantees every field — including ones added in the future — falls back to
@@ -1619,6 +1681,9 @@ export type AppSettings = {
   auto_submit?: boolean;
   auto_submit_confirmed?: boolean;
   auto_submit_key?: AutoSubmitKey;
+  app_context_enabled?: boolean;
+  app_context_denylist?: string[];
+  app_context_profiles?: AppContextProfile[];
   post_process_enabled?: boolean;
   post_process_provider_id?: string;
   post_process_providers?: PostProcessProvider[];
@@ -1664,6 +1729,21 @@ export type BindingResponse = {
   error: string | null;
 };
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard";
+export type ContextAccessStatus =
+  | "enabled"
+  | "disabled"
+  | "profile_disabled"
+  | "denied_application"
+  | "remote_application"
+  | "secure_field"
+  | "security_unknown";
+export type ContextDiagnostics = {
+  application_id: string | null;
+  window_title: string | null;
+  category: AppCategory;
+  status: ContextAccessStatus;
+  captured_characters: number;
+};
 export type CustomSounds = { start: boolean; stop: boolean };
 export type DictationStage =
   | "idle"

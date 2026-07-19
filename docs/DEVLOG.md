@@ -19,6 +19,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-19 | FF-V5    | Complete    | Original status bar states/docking/accessibility, state-bearing tray controls, Hub keyboard navigation, 23 catalogs, retained live matrix                                                       | Frozen install; frontend/translation/build gates; 162 Rust tests; strict Clippy delta; no-bundle build; RustSec/provenance; hosted run `29680441253`                                                                                                                                    | `b02751dc4e0edb06ec0827dfc3fbcdb24e2d7d6d`; closeout `26fc961e23e97e5d358b21f619d4464c37cf02f7`                                                                                                                            | Retained live multi-monitor/scaling/full-screen/focus/drag/screen-reader matrix assigned to FF-R2                                                                                               |
 | 2026-07-19 | FF-V6    | Complete    | Resumable onboarding, privacy promise, permission repair, model/completion separation, shortcut/autostart preferences, first-dictation proof, diagnostics, uninstall-data guidance, 23 catalogs | Frozen install; frontend/446-key translation/build gates; 168 Rust tests; strict Clippy delta; no-bundle release build; RustSec/provenance; hosted run `29690161596` passed                                                                                                             | `bcea051e8f3435eb927502d83fb2c14f7c6b091c`                                                                                                                                                                                 | Retained signed-build live install/permissions/restart/upgrade/uninstall matrix assigned to FF-R2                                                                                               |
 | 2026-07-19 | FF-P4    | Complete    | Deterministic multilingual formatting/backtrack, effective-language filler policy, raw/final separation, confirmed utterance-final submit, 23 catalogs, strict-Clippy baseline cleanup          | Frozen install; frontend/502-key translation/build gates; 195 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance; hosted run `29698366361` passed                                                                                           | `f1d66200f1b345a8a82157bd78965d84044dac2c`                                                                                                                                                                                 | Retained interactive Windows/macOS submit matrix remains assigned to FF-R2                                                                                                                      |
+| 2026-07-19 | FF-P5    | Candidate   | Local process classification, typed per-category boundary/context profiles, fail-closed minimum context, denylist, redacted diagnostics, 23 catalogs                                            | Frozen install; frontend/537-key translation/build gates; 201 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance passed; hosted gate pending                                                                                                | Pending                                                                                                                                                                                                                    | Windows artifact 44,581,888 bytes, SHA-256 `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`                                                                                   |
 
 ### 2026-07-18 — FF-G3
 
@@ -371,6 +372,37 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Deviations or remaining work: the retained interactive press-enter matrix is
   mandatory at FF-R2 under the approved consolidation; no public-release claim
   is made by this candidate.
+
+### 2026-07-19 — FF-P5 (candidate)
+
+- Objective: classify foreground applications locally and deliver explicit,
+  per-category formatting/context profiles, minimum-necessary surrounding-text
+  access, an application denylist, and visible privacy diagnostics.
+- Starting commit: `90fa34c368c937ed5c7c9e80b8328f13ef51fbe7` on canonical
+  `main`.
+- Reuse classification: extension at the existing platform-context, insertion,
+  typed settings/bindings, Advanced settings, and i18next seams; no new runtime
+  dependency.
+- Files changed: typed application categories and profiles; fail-closed settings
+  migration; Windows/macOS context capture policy; redacted diagnostics command;
+  application-aware boundary formatting; settings UI and store; generated
+  bindings; 23 locale catalogs; behavior and gate records.
+- Verification commands: frozen Bun install; ESLint/service boundary; Prettier
+  and Rustfmt; 537-key translation consistency; TypeScript/Vite production
+  build; full Rust tests; warnings-denied Clippy without exemptions; optimized
+  Tauri no-bundle build; RustSec; provenance; diff checks.
+- Automated evidence: 201/201 runnable Rust tests pass with the two explicit
+  731 MB live-model tests ignored. Classification, default-off migration,
+  denylist, remote, secure/unknown-security, redacted diagnostics, and
+  mid-sentence profile fixtures pass. RustSec reports no denied vulnerability
+  and 28 policy-allowed upstream warnings. All catalogs are complete.
+- Artifact: 44,581,888-byte `freeflow.exe`, SHA-256
+  `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`.
+- Result: native gate passed; candidate SHA and hosted evidence pending.
+- Commit SHA: pending.
+- Deviations or remaining work: the retained interactive Windows/macOS
+  application-context matrix remains mandatory at FF-R2 under the approved
+  consolidation; no public-release claim is made by this candidate.
 
 ## Entry template
 

@@ -432,7 +432,8 @@ pub fn paste_last_transcript(app: &AppHandle) {
         return;
     }
 
-    let target = crate::platform_context::capture_active_target();
+    let settings = settings::get_settings(app);
+    let target = crate::platform_context::capture_active_target(&settings);
     match crate::clipboard::paste(text.to_string(), app.clone(), Some(target), false) {
         Ok(outcome) if outcome.inserted => info!("Pasted last transcript via tray."),
         Ok(outcome) => warn!(

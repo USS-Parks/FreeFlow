@@ -1,9 +1,172 @@
 use crate::contracts::PlatformContext;
+use crate::settings::{AppCategory, AppContextProfile, AppSettings};
+use serde::Serialize;
+use specta::Type;
+use tauri::AppHandle;
 
 const CONTEXT_WINDOW_CHARS: usize = 16;
 
-pub fn capture_active_target() -> PlatformContext {
-    capture_platform_target()
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ContextAccessStatus {
+    Enabled,
+    Disabled,
+    ProfileDisabled,
+    DeniedApplication,
+    RemoteApplication,
+    SecureField,
+    SecurityUnknown,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Type)]
+pub struct ContextDiagnostics {
+    pub application_id: Option<String>,
+    pub window_title: Option<String>,
+    pub category: AppCategory,
+    pub status: ContextAccessStatus,
+    pub captured_characters: usize,
+}
+
+pub fn capture_active_target(settings: &AppSettings) -> PlatformContext {
+    capture_platform_target(settings)
+}
+
+pub fn classify_application(application_id: Option<&str>) -> AppCategory {
+    let id = application_id.unwrap_or_default().to_ascii_lowercase();
+    let stem = id.strip_suffix(".exe").unwrap_or(&id);
+    if ["outlook", "olk", "mail", "thunderbird", "spark"].contains(&stem) {
+        AppCategory::Email
+    } else if [
+        "slack", "teams", "ms-teams", "discord", "whatsapp", "signal",
+    ]
+    .contains(&stem)
+    {
+        AppCategory::Messaging
+    } else if ["winword", "pages", "notion", "libreoffice", "soffice"].contains(&stem) {
+        AppCategory::Document
+    } else if [
+        "code",
+        "cursor",
+        "devenv",
+        "xcode",
+        "idea",
+        "webstorm",
+        "pycharm",
+        "sublime_text",
+    ]
+    .contains(&stem)
+    {
+        AppCategory::Code
+    } else if [
+        "windowsterminal",
+        "terminal",
+        "iterm2",
+        "powershell",
+        "pwsh",
+        "cmd",
+        "wezterm-gui",
+        "alacritty",
+    ]
+    .contains(&stem)
+    {
+        AppCategory::Terminal
+    } else {
+        AppCategory::Other
+    }
+}
+
+pub fn profile_for_application(
+    settings: &AppSettings,
+    application_id: Option<&str>,
+) -> AppContextProfile {
+    settings.app_context_profile(classify_application(application_id))
+}
+
+fn normalized_application_id(application_id: Option<&str>) -> String {
+    application_id
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
+}
+
+fn is_denied_application(settings: &AppSettings, application_id: Option<&str>) -> bool {
+    let id = normalized_application_id(application_id);
+    !id.is_empty()
+        && settings
+            .app_context_denylist
+            .iter()
+            .any(|denied| denied.trim().eq_ignore_ascii_case(&id))
+}
+
+fn is_remote_application(application_id: Option<&str>) -> bool {
+    matches!(
+        normalized_application_id(application_id).as_str(),
+        "mstsc.exe"
+            | "mstsc"
+            | "wfica32.exe"
+            | "wfica32"
+            | "screen sharing.app"
+            | "screensharingagent"
+    )
+}
+
+fn profile_allows_context(settings: &AppSettings, application_id: Option<&str>) -> bool {
+    settings.app_context_enabled
+        && profile_for_application(settings, application_id).surrounding_text_enabled
+        && !is_denied_application(settings, application_id)
+        && !is_remote_application(application_id)
+}
+
+pub fn context_access_status(
+    settings: &AppSettings,
+    context: &PlatformContext,
+) -> ContextAccessStatus {
+    if !settings.app_context_enabled {
+        ContextAccessStatus::Disabled
+    } else if !context.secure_field_known {
+        ContextAccessStatus::SecurityUnknown
+    } else if context.secure_field {
+        ContextAccessStatus::SecureField
+    } else if is_remote_application(context.application_id.as_deref()) {
+        ContextAccessStatus::RemoteApplication
+    } else if is_denied_application(settings, context.application_id.as_deref()) {
+        ContextAccessStatus::DeniedApplication
+    } else if !profile_for_application(settings, context.application_id.as_deref())
+        .surrounding_text_enabled
+    {
+        ContextAccessStatus::ProfileDisabled
+    } else {
+        ContextAccessStatus::Enabled
+    }
+}
+
+pub fn diagnostics(settings: &AppSettings, context: &PlatformContext) -> ContextDiagnostics {
+    let status = context_access_status(settings, context);
+    let exposes_context = status == ContextAccessStatus::Enabled;
+    ContextDiagnostics {
+        application_id: context.application_id.clone(),
+        window_title: exposes_context
+            .then(|| context.window_title.clone())
+            .flatten(),
+        category: classify_application(context.application_id.as_deref()),
+        status,
+        captured_characters: if exposes_context {
+            context
+                .preceding_text
+                .as_deref()
+                .map_or(0, |text| text.chars().count())
+        } else {
+            0
+        },
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_context_diagnostics(app: AppHandle) -> ContextDiagnostics {
+    let settings = crate::settings::get_settings(&app);
+    let context = capture_active_target(&settings);
+    diagnostics(&settings, &context)
 }
 
 pub fn same_target(left: &PlatformContext, right: &PlatformContext) -> bool {
@@ -14,7 +177,7 @@ pub fn same_target(left: &PlatformContext, right: &PlatformContext) -> bool {
 }
 
 #[cfg(target_os = "windows")]
-fn capture_platform_target() -> PlatformContext {
+fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
     use std::path::Path;
     use windows::core::{BOOL, PWSTR};
     use windows::Win32::Foundation::CloseHandle;
@@ -80,7 +243,9 @@ fn capture_platform_target() -> PlatformContext {
         result
     }
 
-    unsafe fn focused_accessibility() -> Option<(bool, String, Option<String>)> {
+    unsafe fn focused_accessibility(
+        read_preceding_text: bool,
+    ) -> Option<(bool, String, Option<String>)> {
         let initialized = CoInitializeEx(None, COINIT_APARTMENTTHREADED).is_ok();
         let result = (|| {
             let automation: IUIAutomation =
@@ -93,6 +258,9 @@ fn capture_platform_target() -> PlatformContext {
             }
 
             let preceding = (|| {
+                if !read_preceding_text {
+                    return None;
+                }
                 let pattern: IUIAutomationTextPattern2 =
                     element.GetCurrentPatternAs(UIA_TextPattern2Id).ok()?;
                 let mut active = BOOL(0);
@@ -143,7 +311,9 @@ fn capture_platform_target() -> PlatformContext {
 
         let mut process_id = 0_u32;
         GetWindowThreadProcessId(window, Some(&mut process_id));
-        let accessibility = focused_accessibility();
+        let application_id = process_name(process_id);
+        let accessibility =
+            focused_accessibility(profile_allows_context(settings, application_id.as_deref()));
         let secure_field = accessibility
             .as_ref()
             .map(|(secure, _, _)| *secure)
@@ -157,7 +327,7 @@ fn capture_platform_target() -> PlatformContext {
             .map(|runtime_id| format!("windows:{process_id}:{runtime_id}"));
 
         PlatformContext {
-            application_id: process_name(process_id),
+            application_id,
             window_title,
             selected_text: None,
             secure_field,
@@ -169,7 +339,7 @@ fn capture_platform_target() -> PlatformContext {
 }
 
 #[cfg(target_os = "macos")]
-fn capture_platform_target() -> PlatformContext {
+fn capture_platform_target(settings: &AppSettings) -> PlatformContext {
     use core_foundation::base::{CFRange, CFType, CFTypeRef, TCFType};
     use core_foundation::string::{CFString, CFStringRef};
     use std::ffi::c_void;
@@ -302,8 +472,11 @@ fn capture_platform_target() -> PlatformContext {
             .and_then(|window| copy_attribute(window.as_CFTypeRef(), "AXTitle"))
             .and_then(|value| as_string(&value));
 
+        let application_id = pid_known.then(|| process_name(pid)).flatten();
+        let read_preceding_text = profile_allows_context(settings, application_id.as_deref());
+
         PlatformContext {
-            application_id: pid_known.then(|| process_name(pid)).flatten(),
+            application_id,
             window_title,
             selected_text: None,
             secure_field,
@@ -312,7 +485,7 @@ fn capture_platform_target() -> PlatformContext {
             // accessibility identity. Including it prevents a focus change to
             // another control in the same process from passing the target gate.
             target_id: pid_known.then(|| format!("macos:{pid}:{}", CFHash(focused_ref))),
-            preceding_text: (secure_field_known && !secure_field)
+            preceding_text: (read_preceding_text && secure_field_known && !secure_field)
                 .then(|| preceding_text(focused_ref))
                 .flatten(),
         }
@@ -320,14 +493,18 @@ fn capture_platform_target() -> PlatformContext {
 }
 
 #[cfg(not(any(target_os = "windows", target_os = "macos")))]
-fn capture_platform_target() -> PlatformContext {
+fn capture_platform_target(_settings: &AppSettings) -> PlatformContext {
     PlatformContext::default()
 }
 
 #[cfg(test)]
 mod tests {
-    use super::same_target;
+    use super::{
+        classify_application, context_access_status, diagnostics, profile_for_application,
+        same_target, ContextAccessStatus,
+    };
     use crate::contracts::PlatformContext;
+    use crate::settings::{get_default_settings, AppBoundaryStyle, AppCategory};
 
     #[test]
     fn target_match_requires_stable_explicit_identity() {
@@ -339,5 +516,114 @@ mod tests {
         assert!(same_target(&left, &right));
         right.target_id = Some("target-2".into());
         assert!(!same_target(&left, &right));
+    }
+
+    #[test]
+    fn process_names_classify_without_window_content() {
+        assert_eq!(
+            classify_application(Some("OUTLOOK.EXE")),
+            AppCategory::Email
+        );
+        assert_eq!(
+            classify_application(Some("Slack.exe")),
+            AppCategory::Messaging
+        );
+        assert_eq!(
+            classify_application(Some("WINWORD.EXE")),
+            AppCategory::Document
+        );
+        assert_eq!(classify_application(Some("Code.exe")), AppCategory::Code);
+        assert_eq!(
+            classify_application(Some("WindowsTerminal.exe")),
+            AppCategory::Terminal
+        );
+        assert_eq!(
+            classify_application(Some("browser.exe")),
+            AppCategory::Other
+        );
+    }
+
+    #[test]
+    fn context_is_off_by_default_and_profiles_are_deterministic() {
+        let settings = get_default_settings();
+        let context = PlatformContext {
+            application_id: Some("outlook.exe".into()),
+            secure_field_known: true,
+            ..PlatformContext::default()
+        };
+        assert_eq!(
+            context_access_status(&settings, &context),
+            ContextAccessStatus::Disabled
+        );
+        assert_eq!(
+            profile_for_application(&settings, Some("code.exe")).boundary_style,
+            AppBoundaryStyle::Literal
+        );
+    }
+
+    #[test]
+    fn secure_denied_remote_and_profile_disabled_paths_expose_no_text() {
+        let mut settings = get_default_settings();
+        settings.app_context_enabled = true;
+        settings.app_context_denylist = vec!["secret.exe".into()];
+
+        for (application, secure, known, expected) in [
+            ("mail.exe", true, true, ContextAccessStatus::SecureField),
+            (
+                "mail.exe",
+                false,
+                false,
+                ContextAccessStatus::SecurityUnknown,
+            ),
+            (
+                "secret.exe",
+                false,
+                true,
+                ContextAccessStatus::DeniedApplication,
+            ),
+            (
+                "mstsc.exe",
+                false,
+                true,
+                ContextAccessStatus::RemoteApplication,
+            ),
+            (
+                "code.exe",
+                false,
+                true,
+                ContextAccessStatus::ProfileDisabled,
+            ),
+        ] {
+            let context = PlatformContext {
+                application_id: Some(application.into()),
+                window_title: Some("private title".into()),
+                secure_field: secure,
+                secure_field_known: known,
+                preceding_text: Some("private text".into()),
+                ..PlatformContext::default()
+            };
+            assert_eq!(context_access_status(&settings, &context), expected);
+            let result = diagnostics(&settings, &context);
+            assert_eq!(result.captured_characters, 0);
+            assert_eq!(result.window_title, None);
+        }
+    }
+
+    #[test]
+    fn enabled_context_diagnostics_report_only_character_count() {
+        let mut settings = get_default_settings();
+        settings.app_context_enabled = true;
+        let context = PlatformContext {
+            application_id: Some("winword.exe".into()),
+            window_title: Some("Document".into()),
+            secure_field_known: true,
+            preceding_text: Some("prior text".into()),
+            ..PlatformContext::default()
+        };
+        let result = diagnostics(&settings, &context);
+        assert_eq!(result.status, ContextAccessStatus::Enabled);
+        assert_eq!(result.category, AppCategory::Document);
+        assert_eq!(result.captured_characters, 10);
+        assert_eq!(result.window_title.as_deref(), Some("Document"));
     }
 }
