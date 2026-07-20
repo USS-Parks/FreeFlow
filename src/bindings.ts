@@ -611,6 +611,58 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async getCommandModeSession(): Promise<
+    Result<CommandModeSession | null, string>
+  > {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("get_command_mode_session"),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async confirmCommandModePreference(
+    sessionId: string,
+  ): Promise<Result<CommandModeSession, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("confirm_command_mode_preference", {
+          sessionId,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async copyCommandModeOutput(
+    sessionId: string,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("copy_command_mode_output", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async dismissCommandMode(sessionId: string): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("dismiss_command_mode", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async changePostProcessEnabledSetting(
     enabled: boolean,
   ): Promise<Result<null, string>> {
@@ -2014,6 +2066,26 @@ export type BindingResponse = {
 };
 export type CleanupLevel = "none" | "light" | "medium" | "high";
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard";
+export type CommandModeKind =
+  | "rewrite_selection"
+  | "insert_at_cursor"
+  | "preference_change";
+export type CommandModeSession = {
+  id: string;
+  instruction: string;
+  output_text: string;
+  kind: CommandModeKind;
+  status: CommandModeStatus;
+  message: string;
+};
+export type CommandModeStatus =
+  | "processing"
+  | "completed"
+  | "copied"
+  | "confirmation_required"
+  | "confirmed"
+  | "cancelled"
+  | "failed";
 export type ContextAccessStatus =
   | "enabled"
   | "disabled"

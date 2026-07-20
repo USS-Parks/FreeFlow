@@ -934,6 +934,150 @@ impl ShortcutAction for TranscribeAction {
     }
 }
 
+// Local command-mode action. It shares the coordinator and audio managers with
+// dictation so recording and processing can never overlap with the regular
+// pipeline, but it never writes command audio or instructions to history.
+struct CommandModeAction {
+    targets: Mutex<HashMap<String, crate::contracts::PlatformContext>>,
+}
+
+impl ShortcutAction for CommandModeAction {
+    fn start(
+        &self,
+        app: &AppHandle,
+        binding_id: &str,
+        _shortcut_str: &str,
+        _activation_received_at: Instant,
+    ) {
+        if crate::selected_transform::is_busy(app) {
+            crate::command_mode::fail(
+                app,
+                String::new(),
+                "Finish the selected-text transform before starting command mode".to_string(),
+            );
+            return;
+        }
+        let target = match crate::command_mode::capture_target(app) {
+            Ok(target) => target,
+            Err(error) => {
+                crate::command_mode::fail(app, String::new(), error);
+                return;
+            }
+        };
+        if let Ok(mut targets) = self.targets.lock() {
+            targets.insert(binding_id.to_string(), target);
+        }
+
+        let tm = app.state::<Arc<TranscriptionManager>>();
+        let rm = app.state::<Arc<AudioRecordingManager>>();
+        tm.initiate_model_load();
+        if let Err(error) = rm.preload_vad() {
+            if let Ok(mut targets) = self.targets.lock() {
+                targets.remove(binding_id);
+            }
+            crate::command_mode::fail(app, String::new(), error.to_string());
+            return;
+        }
+        crate::overlay::show_command_overlay(app, "command_listening");
+        change_tray_icon(app, TrayIconState::Recording);
+        match rm.try_start_recording(binding_id, VadPolicy::Offline) {
+            Ok(()) => {
+                shortcut::register_cancel_shortcut(app);
+                let app_clone = app.clone();
+                let rm_clone = Arc::clone(&rm);
+                std::thread::spawn(move || {
+                    play_feedback_sound_blocking(&app_clone, SoundType::Start);
+                    rm_clone.apply_mute();
+                });
+            }
+            Err(error) => {
+                if let Ok(mut targets) = self.targets.lock() {
+                    targets.remove(binding_id);
+                }
+                change_tray_icon(app, TrayIconState::Idle);
+                crate::command_mode::fail(app, String::new(), error);
+            }
+        }
+    }
+
+    fn stop(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
+        shortcut::unregister_cancel_shortcut(app);
+        let target = self
+            .targets
+            .lock()
+            .ok()
+            .and_then(|mut targets| targets.remove(binding_id));
+        let rm = Arc::clone(&app.state::<Arc<AudioRecordingManager>>());
+        let tm = Arc::clone(&app.state::<Arc<TranscriptionManager>>());
+        let cancellation = rm.cancel_generation();
+        rm.remove_mute();
+        play_feedback_sound(app, SoundType::Stop);
+        change_tray_icon(app, TrayIconState::Transcribing);
+        crate::overlay::show_command_overlay(app, "command_processing");
+        let samples = rm.stop_recording(binding_id, cancellation);
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            let _finish_guard = FinishGuard(app.clone());
+            let Some(target) = target else {
+                crate::command_mode::fail(
+                    &app,
+                    String::new(),
+                    "Command target was unavailable".to_string(),
+                );
+                change_tray_icon(&app, TrayIconState::Idle);
+                return;
+            };
+            let Some(samples) = samples.filter(|samples| !samples.is_empty()) else {
+                if rm.was_cancelled_since(cancellation) {
+                    crate::command_mode::cancelled(&app);
+                } else {
+                    crate::command_mode::fail(
+                        &app,
+                        String::new(),
+                        "No command audio was captured".to_string(),
+                    );
+                }
+                change_tray_icon(&app, TrayIconState::Idle);
+                return;
+            };
+            let outcome = tm.transcribe_detailed(samples);
+            if rm.was_cancelled_since(cancellation) {
+                crate::command_mode::cancelled(&app);
+                change_tray_icon(&app, TrayIconState::Idle);
+                return;
+            }
+            let instruction = match outcome {
+                Ok(outcome) if !outcome.text.trim().is_empty() => outcome.text,
+                Ok(_) => {
+                    crate::command_mode::fail(
+                        &app,
+                        String::new(),
+                        "No spoken command was recognized".to_string(),
+                    );
+                    change_tray_icon(&app, TrayIconState::Idle);
+                    return;
+                }
+                Err(error) => {
+                    crate::command_mode::fail(&app, String::new(), error.to_string());
+                    change_tray_icon(&app, TrayIconState::Idle);
+                    return;
+                }
+            };
+            let result = complete_unless_cancelled(
+                crate::command_mode::execute(app.clone(), instruction.clone(), target),
+                || rm.was_cancelled_since(cancellation),
+            )
+            .await;
+            match result {
+                None => crate::command_mode::cancelled(&app),
+                Some(Err(error)) => crate::command_mode::fail(&app, instruction, error),
+                Some(Ok(_)) => {}
+            }
+            change_tray_icon(&app, TrayIconState::Idle);
+        });
+    }
+}
+
 // Cancel Action
 struct CancelAction;
 
@@ -996,6 +1140,12 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
         "transcribe_with_post_process".to_string(),
         Arc::new(TranscribeAction {
             post_process: true,
+            targets: Mutex::new(HashMap::new()),
+        }) as Arc<dyn ShortcutAction>,
+    );
+    map.insert(
+        "command_mode".to_string(),
+        Arc::new(CommandModeAction {
             targets: Mutex::new(HashMap::new()),
         }) as Arc<dyn ShortcutAction>,
     );

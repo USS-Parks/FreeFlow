@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager};
 use crate::actions::ACTION_MAP;
 use crate::managers::audio::AudioRecordingManager;
 use crate::settings::get_settings;
-use crate::transcription_coordinator::is_transcribe_binding;
+use crate::transcription_coordinator::{is_transcribe_binding, DictationStage};
 use crate::TranscriptionCoordinator;
 
 /// Handle a shortcut event from either implementation.
@@ -38,7 +38,8 @@ pub fn handle_shortcut_event(
     // Transcribe bindings are handled by the coordinator.
     if is_transcribe_binding(binding_id) {
         if let Some(coordinator) = app.try_state::<TranscriptionCoordinator>() {
-            coordinator.send_input(binding_id, hotkey_string, is_pressed, settings.push_to_talk);
+            let push_to_talk = binding_id == "command_mode" || settings.push_to_talk;
+            coordinator.send_input(binding_id, hotkey_string, is_pressed, push_to_talk);
         } else {
             warn!("TranscriptionCoordinator is not initialized");
         }
@@ -47,7 +48,14 @@ pub fn handle_shortcut_event(
 
     if binding_id.starts_with("transform_slot_") {
         if is_pressed {
-            crate::selected_transform::start_from_shortcut(app.clone(), binding_id.to_string());
+            let dictation_busy = app
+                .try_state::<TranscriptionCoordinator>()
+                .is_some_and(|coordinator| coordinator.state().stage != DictationStage::Idle);
+            if dictation_busy {
+                warn!("Selected-text transform ignored while dictation or command mode is busy");
+            } else {
+                crate::selected_transform::start_from_shortcut(app.clone(), binding_id.to_string());
+            }
         }
         return;
     }

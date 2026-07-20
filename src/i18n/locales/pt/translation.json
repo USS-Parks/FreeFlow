@@ -884,6 +884,32 @@
     "transform_undone": "Transform undone",
     "transform_unchanged": "No changes",
     "transform_error": "Transform failed",
+    "command_listening": "Listening for a command",
+    "command_processing": "Running command locally...",
+    "command_confirmation": "Confirm preference change",
+    "command_complete": "Command complete",
+    "command_copied": "Command output copied",
+    "command_cancelled": "Command cancelled",
+    "command_error": "Command failed",
+    "command": {
+      "title": "Local command mode",
+      "confirmation": "Confirmation required",
+      "instruction": "Spoken command",
+      "output": "Local output",
+      "confirm": "Confirm change",
+      "copy": "Copy",
+      "cancel": "Cancel",
+      "dismiss": "Dismiss",
+      "status": {
+        "processing": "Processing",
+        "completed": "Inserted",
+        "copied": "Copied for manual paste",
+        "confirmation_required": "Preference change",
+        "confirmed": "Preference changed",
+        "cancelled": "Cancelled",
+        "failed": "Command unavailable"
+      }
+    },
     "transform": {
       "title": "Selected-text transform",
       "failed": "Transform unavailable",

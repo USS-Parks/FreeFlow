@@ -121,7 +121,7 @@ pub struct TranscriptionCoordinator {
 }
 
 pub fn is_transcribe_binding(id: &str) -> bool {
-    id == "transcribe" || id == "transcribe_with_post_process"
+    id == "transcribe" || id == "transcribe_with_post_process" || id == "command_mode"
 }
 
 impl TranscriptionCoordinator {
@@ -424,6 +424,14 @@ fn stop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn command_mode_uses_the_same_coordinator_as_regular_dictation() {
+        assert!(is_transcribe_binding("transcribe"));
+        assert!(is_transcribe_binding("transcribe_with_post_process"));
+        assert!(is_transcribe_binding("command_mode"));
+        assert!(!is_transcribe_binding("transform_slot_polish"));
+    }
 
     #[test]
     fn push_to_talk_release_while_recording_defers_release() {

@@ -23,6 +23,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-19 | FF-A1    | Complete    | Consent-bound pinned llama.cpp runtime and SmolLM2 model, local-only provider migration, resource recommendations, bounded loopback execution, cancellation/timeout/corrupt-model raw fallback, 23 catalogs | Frontend/552-key translation/build gates; 210 Rust tests plus 2 ignored; strict Clippy; Windows explicit install and CPU/Vulkan/timeout/corruption live probes; hosted live run `29703174180`; hosted native run `29703174188`                                                          | `ba0bc09b0cc3d19d1d4bbc7b3c0157808fc9a9fb`                                                                                                                                                                                 | Windows CPU/Vulkan and Apple Silicon CPU/Metal paths passed; FF-A2 is next                                                                                                                      |
 | 2026-07-19 | FF-A2    | Complete    | None/Light/Medium/High cleanup, per-app FreeFlow styles, deterministic pre-transform backtrack, semantic output guards, raw/final review and reversible cleanup, 23 catalogs                                | Frontend/569-key translation/build gates; 217 Rust tests plus 2 ignored; strict Clippy; optimized Windows no-bundle build; RustSec/provenance; hosted run `29705327094`                                                                                                                 | `e91171dd7eb36098ec5444f0df799296cd3cf5cb`                                                                                                                                                                                 | Windows/macOS native, provenance, and security passed; FF-A3 is next                                                                                                                            |
 | 2026-07-19 | FF-A3    | Complete    | Configurable local transform slots, explicit fail-closed selection capture, exact diff/replacement, accept/undo/retry/copy, local writing samples, 23 catalogs                                              | Frontend/606-key translation/build gates; 226 Rust tests plus 2 ignored; strict Clippy; optimized Windows no-bundle build; RustSec/provenance; hosted run `29708191017`                                                                                                                 | `e22b9022578a9cca02e37e6fb759ff8b37a58dea`                                                                                                                                                                                 | Windows/macOS native, provenance, and security passed; representative application matrix remains assigned to FF-R2; FF-A4 is next                                                               |
+| 2026-07-19 | FF-A4    | In progress | Hold-to-speak local command mode, shared lifecycle exclusion/cancel, guarded selection/cursor delivery, lossless copy fallback, explicit preference confirmation, 23 catalogs                               | Frontend/628-key translation/build gates; 231 Rust tests plus 2 ignored; strict Clippy; optimized Windows no-bundle build; RustSec/provenance passed                                                                                                                                    | Candidate pending                                                                                                                                                                                                          | Hosted Windows/macOS candidate CI required before Milestone A closeout; representative application matrix remains assigned to FF-R2                                                             |
 
 ### 2026-07-18 — FF-G3
 
@@ -513,6 +514,41 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Commit SHA: `e22b9022578a9cca02e37e6fb759ff8b37a58dea`.
 - Deviations or remaining work: the representative Windows/macOS application,
   native-undo, and selection-replacement matrix remains assigned to FF-R2.
+
+### 2026-07-19 — FF-A4 (candidate)
+
+- Objective: implement press-and-hold spoken local commands over a safe
+  selection or cursor, with shared lifecycle exclusion/cancellation, guarded
+  delivery, lossless copy fallback, and separate explicit confirmation before
+  any supported preference change.
+- Starting commit: `3cd1d3c51f49c63fe866f7991a6be0362020ae54` on canonical
+  `main`.
+- Reuse classification: extension at the FF-V2 coordinator/audio/cancellation,
+  FF-P5 target policy, FF-A1 local runtime, FF-A3 explicit-selection,
+  shortcut/settings/bindings, clipboard, and non-focus-stealing overlay seams;
+  original command classifier, prompt boundary, confirmation state, and UI.
+- Files changed: command-mode manager and fixtures; coordinator-owned
+  hold-to-speak action; settings-schema-v7 shortcut; command request limits;
+  selection/cursor delivery and copy fallback; explicit preference-confirmation
+  commands; generated bindings; overlay UI; 23 locale catalogs; behavior matrix
+  and gate evidence.
+- Verification commands: frozen Bun install; ESLint/service boundary; Prettier
+  and Rustfmt; 628-key translation consistency; TypeScript/Vite production
+  build; full Rust tests; warnings-denied Clippy; optimized Tauri no-bundle
+  build; RustSec; provenance; diff checks; typed-binding regeneration.
+- Automated evidence: 231/231 runnable Rust tests pass with the two explicit
+  731 MB live-model tests ignored. Intent isolation, preference confirmation,
+  unsupported/remote rejection, prompt boundaries, shared coordinator,
+  cancellation, and processing-exclusion fixtures pass. All catalogs are
+  complete.
+- Artifact: 45,270,528-byte `freeflow.exe`, SHA-256
+  `d22690b52d975ce499fde67ef089f0036d4edac2979312c77da414f50f5a5ed4`.
+- Result: candidate implementation complete; hosted Windows/macOS native,
+  provenance, and security results pending.
+- Commit SHA: pending candidate commit.
+- Deviations or remaining work: the representative Windows/macOS selection,
+  cursor, replacement, copy-fallback, and hold/cancel application matrix remains
+  assigned to FF-R2; FF-X1 must not begin before FF-A4 closeout.
 
 ## Entry template
 

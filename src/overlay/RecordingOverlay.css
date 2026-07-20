@@ -492,3 +492,38 @@
   color: white;
   background: var(--s-accent);
 }
+
+.command-instruction,
+.command-output {
+  display: grid;
+  gap: 4px;
+  min-height: 0;
+}
+
+.command-card {
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+}
+
+.command-instruction > span,
+.command-output > span {
+  color: var(--s-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.command-instruction p,
+.command-output p {
+  margin: 0;
+  max-height: 76px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.command-output p {
+  padding: 10px 12px;
+  border: 1px solid var(--s-hair);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-background) 86%, transparent);
+}

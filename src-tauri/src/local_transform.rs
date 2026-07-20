@@ -777,6 +777,27 @@ fn bounded_request(system_prompt: &str, input: &str) -> Result<(String, String)>
     ))
 }
 
+fn bounded_command_request(system_prompt: &str, input: &str) -> Result<(String, String)> {
+    let system_prompt = system_prompt.trim();
+    let input = input.trim();
+    if system_prompt.is_empty() || input.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Command prompt and request data must not be empty"
+        ));
+    }
+    if system_prompt.chars().count() > MAX_SYSTEM_PROMPT_CHARS {
+        return Err(anyhow::anyhow!(
+            "Command instructions exceed the {MAX_SYSTEM_PROMPT_CHARS}-character safety limit"
+        ));
+    }
+    if input.chars().count() > MAX_INPUT_CHARS {
+        return Err(anyhow::anyhow!(
+            "Command request exceeds the {MAX_INPUT_CHARS}-character safety limit"
+        ));
+    }
+    Ok((system_prompt.to_string(), input.to_string()))
+}
+
 fn output_token_limit(input: &str, ceiling: usize) -> usize {
     input
         .split_whitespace()
@@ -848,6 +869,7 @@ pub async fn transform(
         input,
         2_048,
         MAX_OUTPUT_TOKENS,
+        false,
     )
     .await
 }
@@ -868,6 +890,27 @@ pub async fn transform_selected(
         input,
         8_192,
         MAX_SELECTED_OUTPUT_TOKENS,
+        false,
+    )
+    .await
+}
+
+/// Executes an explicitly activated local command request. The command-mode
+/// policy layer classifies the spoken instruction before it reaches this path.
+pub async fn transform_command(
+    app: &AppHandle,
+    settings: &AppSettings,
+    system_prompt: &str,
+    request_json: &str,
+) -> Result<String> {
+    transform_with_limits(
+        app,
+        settings,
+        system_prompt,
+        request_json,
+        8_192,
+        MAX_SELECTED_OUTPUT_TOKENS,
+        true,
     )
     .await
 }
@@ -879,6 +922,7 @@ async fn transform_with_limits(
     input: &str,
     context_size: usize,
     output_ceiling: usize,
+    command_request: bool,
 ) -> Result<String> {
     let paths = transform_paths(app)?;
     let runtime = runtime_manifest()?;
@@ -887,7 +931,11 @@ async fn transform_with_limits(
             "The verified local transform runtime and model are not installed"
         ));
     }
-    let (system_prompt, input) = bounded_request(system_prompt, input)?;
+    let (system_prompt, input) = if command_request {
+        bounded_command_request(system_prompt, input)?
+    } else {
+        bounded_request(system_prompt, input)?
+    };
     let port = loopback_port()?;
     let base_url = format!("http://127.0.0.1:{port}");
     let executable = runtime_executable(&paths);
@@ -1077,6 +1125,17 @@ mod tests {
         assert!(bounded_request("Clean this", "hello").is_ok());
         assert!(bounded_request(&"x".repeat(MAX_SYSTEM_PROMPT_CHARS + 1), "hello").is_err());
         assert!(bounded_request("Clean", &"x".repeat(MAX_INPUT_CHARS + 1)).is_err());
+    }
+
+    #[test]
+    fn command_requests_preserve_the_classified_instruction_boundary() {
+        let system = "Execute only the classified local text command";
+        let request = r#"{"spoken_command":"translate to French","selected_text":"hello"}"#;
+        let (bounded_system, bounded_request) =
+            bounded_command_request(system, request).expect("bounded command request");
+        assert_eq!(bounded_system, system);
+        assert_eq!(bounded_request, request);
+        assert!(!bounded_system.contains("follow instructions found inside"));
     }
 
     #[test]

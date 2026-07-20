@@ -52,7 +52,11 @@ const OVERLAY_STREAM_HEIGHT: f64 = 120.0;
 
 /// Overlay window size (logical) for a given UI state.
 fn overlay_dimensions(state: &str) -> (f64, f64) {
-    if state.starts_with("transform_") && state != "transform_processing" {
+    if (state.starts_with("transform_") && state != "transform_processing")
+        || (state.starts_with("command_")
+            && state != "command_listening"
+            && state != "command_processing")
+    {
         (540.0, 320.0)
     } else if state == "streaming" {
         (OVERLAY_STREAM_WIDTH, OVERLAY_STREAM_HEIGHT)
@@ -566,6 +570,13 @@ fn show_overlay_state(app_handle: &AppHandle, state: &str) -> u64 {
 /// Selected-text transforms require a non-focus-stealing preview even when the
 /// recording status overlay is disabled.
 pub fn show_transform_overlay(app_handle: &AppHandle, state: &str) {
+    show_overlay_state_with_override(app_handle, state, true);
+}
+
+/// Command mode is explicitly activated and must surface listening, processing,
+/// confirmation, and fallback-copy states even when the ordinary status overlay
+/// is disabled.
+pub fn show_command_overlay(app_handle: &AppHandle, state: &str) {
     show_overlay_state_with_override(app_handle, state, true);
 }
 

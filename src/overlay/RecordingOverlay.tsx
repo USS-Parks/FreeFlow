@@ -8,6 +8,7 @@ import type {
   StreamPhaseEvent,
   StreamTextEvent,
   StreamWorkKind,
+  CommandModeSession,
   SelectedTransformSession,
 } from "@/bindings";
 import i18n, { syncLanguageFromSettings } from "@/i18n";
@@ -26,7 +27,14 @@ type OverlayState =
   | "transform_applied"
   | "transform_undone"
   | "transform_unchanged"
-  | "transform_error";
+  | "transform_error"
+  | "command_listening"
+  | "command_processing"
+  | "command_confirmation"
+  | "command_complete"
+  | "command_copied"
+  | "command_cancelled"
+  | "command_error";
 
 // Number of reactive bars in the waveform (the simple, smoothed style shared by
 // every overlay form). Mic levels arrive as 16 FFT buckets; we take the first N.
@@ -47,6 +55,9 @@ const RecordingOverlay: React.FC = () => {
   const [transformSession, setTransformSession] =
     useState<SelectedTransformSession | null>(null);
   const [transformError, setTransformError] = useState("");
+  const [commandSession, setCommandSession] =
+    useState<CommandModeSession | null>(null);
+  const [commandError, setCommandError] = useState("");
   // Bumped on each new streaming session so the Live card remounts fresh (replays
   // the pop-in, and never animates in from the previous panel's open size).
   const [session, setSession] = useState(0);
@@ -137,6 +148,13 @@ const RecordingOverlay: React.FC = () => {
         "selected-transform-error",
         ({ payload }) => setTransformError(payload.message),
       );
+      const unlistenCommand = await listen<CommandModeSession>(
+        "command-mode-updated",
+        ({ payload }) => {
+          setCommandSession(payload);
+          setCommandError(payload.status === "failed" ? payload.message : "");
+        },
+      );
 
       return () => {
         unlistenShow();
@@ -146,6 +164,7 @@ const RecordingOverlay: React.FC = () => {
         unlistenPhase();
         unlistenTransform();
         unlistenTransformError();
+        unlistenCommand();
       };
     };
 
@@ -245,6 +264,128 @@ const RecordingOverlay: React.FC = () => {
     const result = await action();
     if (result.status === "error") setTransformError(result.error);
   };
+
+  const runCommandAction = async (
+    action: () => Promise<
+      { status: "ok" } | { status: "error"; error: string }
+    >,
+  ) => {
+    setCommandError("");
+    const result = await action();
+    if (result.status === "error") setCommandError(result.error);
+  };
+
+  if (
+    state.startsWith("command_") &&
+    state !== "command_listening" &&
+    state !== "command_processing"
+  ) {
+    const sessionId = commandSession?.id ?? "";
+    const needsConfirmation =
+      commandSession?.status === "confirmation_required";
+    return (
+      <div
+        dir={direction}
+        className={`ov-stage ${position} ov-fade ${isVisible ? "show" : ""}`}
+      >
+        <section
+          className="scard transform-card command-card"
+          role="dialog"
+          aria-label={t("overlay.command.title")}
+        >
+          <header className="transform-header">
+            <div>
+              <span className="transform-eyebrow">
+                {t("overlay.command.title")}
+              </span>
+              <strong>
+                {needsConfirmation
+                  ? t("overlay.command.confirmation")
+                  : t(
+                      `overlay.command.status.${commandSession?.status ?? "failed"}`,
+                    )}
+              </strong>
+            </div>
+            <button
+              className="sx"
+              aria-label={t("overlay.command.dismiss")}
+              onClick={() => {
+                void runCommandAction(() =>
+                  commands.dismissCommandMode(sessionId),
+                );
+              }}
+            >
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M4 4 L12 12 M12 4 L4 12"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+          </header>
+          {!!commandSession?.instruction && (
+            <div className="command-instruction">
+              <span>{t("overlay.command.instruction")}</span>
+              <p>{commandSession.instruction}</p>
+            </div>
+          )}
+          {commandError ? (
+            <p className="transform-error" role="alert">
+              {commandError}
+            </p>
+          ) : (
+            <p className="transform-note">{commandSession?.message}</p>
+          )}
+          {!!commandSession?.output_text && (
+            <div className="command-output">
+              <span>{t("overlay.command.output")}</span>
+              <p>{commandSession.output_text}</p>
+            </div>
+          )}
+          <footer className="transform-actions">
+            {needsConfirmation && (
+              <button
+                className="transform-action primary"
+                onClick={() =>
+                  void runCommandAction(() =>
+                    commands.confirmCommandModePreference(sessionId),
+                  )
+                }
+              >
+                {t("overlay.command.confirm")}
+              </button>
+            )}
+            {!!commandSession?.output_text && (
+              <button
+                className="transform-action"
+                onClick={() =>
+                  void runCommandAction(() =>
+                    commands.copyCommandModeOutput(sessionId),
+                  )
+                }
+              >
+                {t("overlay.command.copy")}
+              </button>
+            )}
+            <button
+              className="transform-action"
+              onClick={() =>
+                void runCommandAction(() =>
+                  commands.dismissCommandMode(sessionId),
+                )
+              }
+            >
+              {needsConfirmation
+                ? t("overlay.command.cancel")
+                : t("overlay.command.dismiss")}
+            </button>
+          </footer>
+        </section>
+      </div>
+    );
+  }
 
   if (state.startsWith("transform_") && state !== "transform_processing") {
     const sessionId = transformSession?.id ?? "";
@@ -481,9 +622,12 @@ const RecordingOverlay: React.FC = () => {
   const working =
     state === "transcribing" ||
     state === "processing" ||
-    state === "transform_processing";
+    state === "transform_processing" ||
+    state === "command_processing";
   const workLabel =
-    state === "processing" || state === "transform_processing"
+    state === "processing" ||
+    state === "transform_processing" ||
+    state === "command_processing"
       ? t("overlay.processing")
       : t("overlay.transcribing");
 

@@ -285,6 +285,12 @@ fn clear_processing(app: &AppHandle) {
     }
 }
 
+pub fn is_busy(app: &AppHandle) -> bool {
+    app.try_state::<SelectedTransformState>()
+        .and_then(|state| state.0.lock().ok().map(|store| store.processing))
+        .unwrap_or(false)
+}
+
 async fn execute_transform(
     app: AppHandle,
     slot: TransformSlot,

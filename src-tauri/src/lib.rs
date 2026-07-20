@@ -8,6 +8,7 @@ mod catalog;
 mod cleanup;
 pub mod cli;
 mod clipboard;
+mod command_mode;
 mod commands;
 pub mod contracts;
 mod helpers;
@@ -198,6 +199,7 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     app_handle.manage(snippet_manager.clone());
     app_handle.manage(clipboard::InsertionState::new());
     app_handle.manage(selected_transform::SelectedTransformState::new());
+    app_handle.manage(command_mode::CommandModeState::new());
     app_handle.manage(tray::CurrentTrayIconState::new());
 
     // Note: Shortcuts are NOT initialized here.
@@ -1047,6 +1049,10 @@ pub fn run(cli_args: CliArgs) {
             selected_transform::add_writing_sample,
             selected_transform::update_writing_sample,
             selected_transform::delete_writing_sample,
+            command_mode::get_command_mode_session,
+            command_mode::confirm_command_mode_preference,
+            command_mode::copy_command_mode_output,
+            command_mode::dismiss_command_mode,
             shortcut::change_post_process_enabled_setting,
             shortcut::change_experimental_enabled_setting,
             shortcut::change_post_process_base_url_setting,
