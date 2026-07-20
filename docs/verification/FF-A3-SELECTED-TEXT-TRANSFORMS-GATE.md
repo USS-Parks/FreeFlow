@@ -67,4 +67,6 @@ policy, provenance, and diff checks. RustSec reports no denied vulnerability
 and 28 policy-allowed upstream warnings. The optimized Windows executable is
 45,165,568 bytes with SHA-256
 `36aaba53e5a1666a8d41608505392ce4658417bea2b41ede1ab474299d88b387`.
-Hosted Windows/macOS candidate evidence is recorded during closeout.
+Hosted GitHub Actions run `29708191017` passed Windows and macOS native tests,
+provenance, and security at exact candidate
+`e22b9022578a9cca02e37e6fb759ff8b37a58dea`.

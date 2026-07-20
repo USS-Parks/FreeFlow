@@ -22,7 +22,7 @@ The log is append-only once STS execution begins. A prompt is not complete until
 | 2026-07-19 | FF-P5    | Complete    | Local process classification, typed per-category boundary/context profiles, fail-closed minimum context, denylist, redacted diagnostics, 23 catalogs                                                        | Frozen install; frontend/537-key translation/build gates; 201 Rust tests; zero-exemption warnings-denied Clippy; no-bundle release build; RustSec/provenance; hosted run `29700140823` passed                                                                                           | `44c9ac6b8371440e20aa440542396022dbbeb3e0`                                                                                                                                                                                 | Windows artifact 44,581,888 bytes, SHA-256 `c588c93ba50e2ab64366486a30404eebc6d6c016a4cba379bc9f493a5ead34f1`                                                                                   |
 | 2026-07-19 | FF-A1    | Complete    | Consent-bound pinned llama.cpp runtime and SmolLM2 model, local-only provider migration, resource recommendations, bounded loopback execution, cancellation/timeout/corrupt-model raw fallback, 23 catalogs | Frontend/552-key translation/build gates; 210 Rust tests plus 2 ignored; strict Clippy; Windows explicit install and CPU/Vulkan/timeout/corruption live probes; hosted live run `29703174180`; hosted native run `29703174188`                                                          | `ba0bc09b0cc3d19d1d4bbc7b3c0157808fc9a9fb`                                                                                                                                                                                 | Windows CPU/Vulkan and Apple Silicon CPU/Metal paths passed; FF-A2 is next                                                                                                                      |
 | 2026-07-19 | FF-A2    | Complete    | None/Light/Medium/High cleanup, per-app FreeFlow styles, deterministic pre-transform backtrack, semantic output guards, raw/final review and reversible cleanup, 23 catalogs                                | Frontend/569-key translation/build gates; 217 Rust tests plus 2 ignored; strict Clippy; optimized Windows no-bundle build; RustSec/provenance; hosted run `29705327094`                                                                                                                 | `e91171dd7eb36098ec5444f0df799296cd3cf5cb`                                                                                                                                                                                 | Windows/macOS native, provenance, and security passed; FF-A3 is next                                                                                                                            |
-| 2026-07-19 | FF-A3    | In progress | Configurable local transform slots, explicit fail-closed selection capture, exact diff/replacement, accept/undo/retry/copy, local writing samples, 23 catalogs                                              | Frontend/606-key translation/build gates; 226 Rust tests plus 2 ignored; strict Clippy; optimized Windows no-bundle build; RustSec/provenance passed                                                                                                                                    | Candidate pending                                                                                                                                                                                                          | Hosted Windows/macOS candidate CI required before closeout; representative application matrix remains assigned to FF-R2                                                                         |
+| 2026-07-19 | FF-A3    | Complete    | Configurable local transform slots, explicit fail-closed selection capture, exact diff/replacement, accept/undo/retry/copy, local writing samples, 23 catalogs                                              | Frontend/606-key translation/build gates; 226 Rust tests plus 2 ignored; strict Clippy; optimized Windows no-bundle build; RustSec/provenance; hosted run `29708191017`                                                                                                                 | `e22b9022578a9cca02e37e6fb759ff8b37a58dea`                                                                                                                                                                                 | Windows/macOS native, provenance, and security passed; representative application matrix remains assigned to FF-R2; FF-A4 is next                                                               |
 
 ### 2026-07-18 — FF-G3
 
@@ -480,7 +480,7 @@ src-tauri/Cargo.lock`; provenance and diff gates.
 - Deviations or remaining work: Milestone A hardware-tier acceptance remains
   owned by its final milestone and retained FF-R2 release evidence.
 
-### 2026-07-19 — FF-A3 (candidate)
+### 2026-07-19 — FF-A3 (complete)
 
 - Objective: implement configurable selected-text transform slots with original
   local prompts, explicit selection capture, exact change diff, guarded
@@ -507,12 +507,12 @@ src-tauri/Cargo.lock`; provenance and diff gates.
   fixtures pass. All catalogs are complete.
 - Artifact: 45,165,568-byte `freeflow.exe`, SHA-256
   `36aaba53e5a1666a8d41608505392ce4658417bea2b41ede1ab474299d88b387`.
-- Result: candidate implementation complete; hosted Windows/macOS native,
-  provenance, and security results pending.
-- Commit SHA: pending candidate commit.
+- Hosted evidence: GitHub Actions run `29708191017` passed Windows and macOS
+  native tests, provenance, and security at the exact candidate commit.
+- Result: FF-A3 is complete and FF-A4 is next.
+- Commit SHA: `e22b9022578a9cca02e37e6fb759ff8b37a58dea`.
 - Deviations or remaining work: the representative Windows/macOS application,
-  native-undo, and selection-replacement matrix remains assigned to FF-R2;
-  FF-A4 must not begin before FF-A3 closeout.
+  native-undo, and selection-replacement matrix remains assigned to FF-R2.
 
 ## Entry template
 
